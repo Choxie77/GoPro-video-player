@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>GoPro Travels Player</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Public+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* A screening room: the picture first, controls in one quiet bar, the queue beside it. Deliberately dark only. */
+:root {
+  --bg: #0b1014; --panel: #141c23; --ink: #e6edf2; --muted: #8fa0ad; --line: #24313b; --accent: #4cc3cb; --bad: #f08a83;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "Public Sans", "Helvetica Neue", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); }
+body { padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.wrap { max-width: 1400px; margin: 0 auto; display: grid; gap: 14px; }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+h1 { font: 700 20px/1.2 var(--display); margin: 0; letter-spacing: -0.01em; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+button, select { font: inherit; color: inherit; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 12px; cursor: pointer; font-weight: 600; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .stage { grid-template-columns: 1fr; } }
+.screen { display: grid; gap: 10px; min-width: 0; }
+video { width: 100%; max-height: 78vh; background: #000; border-radius: 10px; display: block; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bar .grow { flex: 1; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 7px 12px; cursor: pointer; font-weight: 600; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
+.seg button:disabled { opacity: .4; cursor: default; }
+.title { font: 700 18px/1.25 var(--display); margin: 0; overflow-wrap: anywhere; }
+.info { font-size: 13px; }
+.note { background: #3a2c16; color: #f0b45a; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+.note.bad { background: #3d1f1d; color: var(--bad); }
+aside { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 6px; max-height: 80vh; overflow: auto; }
+.item { display: grid; grid-template-columns: 24px 1fr; gap: 8px; text-align: left; border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 8px; cursor: pointer; }
+.item:hover { border-color: var(--line); }
+.item[aria-current="true"] { border-color: var(--accent); background: #0f2a2d; }
+.item .n { color: var(--muted); font: 500 12px var(--mono); padding-top: 2px; }
+.item .t { overflow-wrap: anywhere; font-size: 14px; }
+.keys { font-size: 12px; }
+kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; color: var(--ink); }
+.center { min-height: 60vh; display: grid; place-items: center; text-align: center; }
+.center > div { display: grid; gap: 12px; max-width: 46ch; justify-items: center; }
+</style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>GoPro Travels Player</h1>
+    <div class="bar"><span class="muted" id="who"></span><button class="btn" id="signin" hidden>Sign in with Google</button></div>
+  </header>
+  <p class="note" id="note" hidden></p>
+
+  <div id="welcome" class="center" hidden><div>
+    <p class="title">Plays your clips straight from Google Drive</p>
+    <p class="muted">Open a clip from the GoPro Travels Library, or sign in first. The player only reads your Drive; nothing is saved on this device.</p>
+    <button class="btn primary" id="signin2">Sign in with Google</button>
+  </div></div>
+
+  <div class="stage" id="stage" hidden>
+    <div class="screen">
+      <video id="v" controls playsinline preload="metadata"></video>
+      <div class="bar">
+        <div class="seg" role="group" aria-label="Quality">
+          <button id="q-light" aria-pressed="false" title="540p copy, starts fast (key 1)">Light</button>
+          <button id="q-full" aria-pressed="false" title="Original file (key 2)">Full</button>
+        </div>
+        <button class="btn" id="prev" title="Previous clip (P)">⏮</button>
+        <button class="btn" id="back" title="Back 5 s (J)">−5s</button>
+        <button class="btn" id="play" title="Play / pause (K or Space)">▶</button>
+        <button class="btn" id="fwd" title="Forward 5 s (L)">+5s</button>
+        <button class="btn" id="next" title="Next clip (N)">⏭</button>
+        <select class="btn" id="speed" aria-label="Speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option></select>
+        <span class="grow"></span>
+        <label class="muted" style="font-size:13px;display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="auto" checked> Play next automatically</label>
+      </div>
+      <div style="display:grid;gap:4px">
+        <p class="title" id="title"></p>
+        <p class="info muted mono" id="info"></p>
+      </div>
+      <p class="keys muted"><kbd>K</kbd>/<kbd>Space</kbd> play · <kbd>J</kbd> <kbd>L</kbd> ±5 s · <kbd>←</kbd> <kbd>→</kbd> ±1 s · <kbd>,</kbd> <kbd>.</kbd> one frame · <kbd>1</kbd> Light · <kbd>2</kbd> Full · <kbd>P</kbd> <kbd>N</kbd> previous / next · <kbd>F</kbd> full screen</p>
+    </div>
+    <aside id="queue" aria-label="Queue"></aside>
+  </div>
+</div>
+
+<script>
+// Set once after creating the Google sign-in key (see the setup steps). It is public by design.
+const CLIENT_ID = "";
+const SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+const $ = (id) => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const TEST_API = qs.get("api"); // local testing only: a stand-in Drive API
+
+let token = null, tokenExpires = 0, tokenClient = null;
+let items = [], idx = 0, quality = "light", useProxy = true, triedDirect = false;
+
+/* ---------- what to play: #q=light&i=0&list=orig~light~title~start|... ---------- */
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  items = (h.get("list") || "").split("|").filter(Boolean).map((s) => {
+    const [orig, light, title, start] = s.split("~").map((x) => decodeURIComponent(x || ""));
+    return {orig, light, title: title || orig, start: Number(start) || 0};
+  });
+  idx = Math.min(Math.max(0, Number(h.get("i")) || 0), Math.max(0, items.length - 1));
+  quality = h.get("q") === "full" ? "full" : "light";
+}
+
+/* ---------- sign-in (Google Identity Services, read-only Drive) ---------- */
+function saveToken() { try { sessionStorage.setItem("gtp-token", JSON.stringify({token, tokenExpires})); } catch (e) {} }
+function loadToken() {
+  if (TEST_API) { token = qs.get("token") || "test"; tokenExpires = Date.now() + 864e5; return; }
+  try { const s = JSON.parse(sessionStorage.getItem("gtp-token") || "null"); if (s && s.tokenExpires > Date.now() + 60e3) ({token, tokenExpires} = s); } catch (e) {}
+}
+function initGoogle() {
+  if (TEST_API || tokenClient) return true;
+  if (!CLIENT_ID) { note("The player isn't connected to Google yet: its sign-in key still needs to be added (see the setup steps).", true); return false; }
+  if (!window.google?.accounts?.oauth2) return false;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID, scope: SCOPE,
+    callback: (r) => {
+      if (r.error) return note("Google sign-in didn't complete. Try again.", true);
+      token = r.access_token; tokenExpires = Date.now() + (r.expires_in - 60) * 1000; saveToken();
+      $("who").textContent = "Signed in"; $("signin").hidden = true; $("welcome").hidden = true; note("");
+      start();
+    },
+  });
+  return true;
+}
+function signIn() {
+  if (!initGoogle()) { setTimeout(signIn, 300); return; }
+  tokenClient.requestAccessToken({prompt: token ? "" : "consent"});
+}
+$("signin").onclick = signIn; $("signin2").onclick = signIn;
+
+function note(msg, bad) { const n = $("note"); n.textContent = msg; n.hidden = !msg; n.className = "note" + (bad ? " bad" : ""); }
+
+/* ---------- streaming ---------- */
+async function registerProxy() {
+  if (!("serviceWorker" in navigator)) return false;
+  try {
+    await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) await new Promise((r) => { navigator.serviceWorker.addEventListener("controllerchange", r, {once: true}); setTimeout(r, 1500); });
+    return !!navigator.serviceWorker.controller;
+  } catch (e) { return false; }
+}
+function srcFor(id) {
+  const api = TEST_API ? `&api=${encodeURIComponent(TEST_API)}` : "";
+  if (useProxy) return `stream/${id}?t=${encodeURIComponent(token)}${api}`;
+  return `${TEST_API || "https://www.googleapis.com/drive/v3/files/"}${id}?alt=media&access_token=${encodeURIComponent(token)}`;
+}
+
+const v = $("v");
+function canHevc() { return !!(v.canPlayType('video/mp4; codecs="hvc1"') || v.canPlayType('video/mp4; codecs="hev1"')); }
+
+function load(keepTime) {
+  const it = items[idx]; if (!it) return;
+  if (quality === "light" && !it.light) quality = "full";
+  const id = quality === "light" ? it.light : it.orig;
+  const t = keepTime ? v.currentTime : it.start;
+  const wasPlaying = keepTime ? !v.paused : true;
+  v.src = srcFor(id);
+  v.addEventListener("loadedmetadata", () => { if (t) v.currentTime = t; if (wasPlaying) v.play().catch(() => {}); }, {once: true});
+  $("title").textContent = it.title;
+  $("info").textContent = `${idx + 1} of ${items.length} · ${quality === "light" ? "Light (540p copy)" : "Full (original)"}`;
+  $("q-light").disabled = !it.light;
+  $("q-light").setAttribute("aria-pressed", quality === "light"); $("q-full").setAttribute("aria-pressed", quality === "full");
+  $("prev").disabled = idx === 0; $("next").disabled = idx >= items.length - 1;
+  note("");
+  drawQueue();
+  const h = new URLSearchParams(location.hash.slice(1)); h.set("i", idx); h.set("q", quality);
+  history.replaceState(null, "", "#" + h.toString());
+}
+v.addEventListener("loadedmetadata", () => {
+  const it = items[idx];
+  $("info").textContent = `${idx + 1} of ${items.length} · ${quality === "light" ? "Light (540p copy)" : "Full (original)"} · ${v.videoWidth}×${v.videoHeight} · ${fmt(v.duration)}`;
+});
+v.addEventListener("error", () => {
+  if (Date.now() > tokenExpires) { note("Your Google session ended. Sign in again to keep watching.", true); $("signin").hidden = false; return; }
+  if (useProxy && !triedDirect) { triedDirect = true; useProxy = false; load(true); return; } // fall back to a direct link
+  if (quality === "full" && items[idx]?.light) { note("The original wouldn't play in this browser, so the Light copy is playing instead.", false); quality = "light"; load(true); return; }
+  note("This clip couldn't be played. Check that you're signed in with the Google account that owns the Drive.", true);
+});
+v.addEventListener("ended", () => { if ($("auto").checked && idx < items.length - 1) { idx++; load(false); } });
+v.addEventListener("play", () => { $("play").textContent = "❚❚"; });
+v.addEventListener("pause", () => { $("play").textContent = "▶"; });
+
+function fmt(s) { if (!isFinite(s)) return ""; const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`; }
+function drawQueue() {
+  $("queue").innerHTML = `<span class="muted" style="font-size:12px;padding:4px 8px">Queue · ${items.length} clip${items.length === 1 ? "" : "s"}</span>` +
+    items.map((it, i) => `<button class="item" data-i="${i}" aria-current="${i === idx}"><span class="n">${i + 1}</span><span class="t">${it.title.replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]))}</span></button>`).join("");
+}
+$("queue").addEventListener("click", (e) => { const b = e.target.closest(".item"); if (b) { idx = +b.dataset.i; load(false); } });
+const step = (d) => { v.currentTime = Math.max(0, Math.min((v.duration || 0), v.currentTime + d)); };
+$("q-light").onclick = () => { quality = "light"; load(true); };
+$("q-full").onclick = () => { quality = "full"; load(true); };
+$("prev").onclick = () => { if (idx > 0) { idx--; load(false); } };
+$("next").onclick = () => { if (idx < items.length - 1) { idx++; load(false); } };
+$("back").onclick = () => step(-5); $("fwd").onclick = () => step(5);
+$("play").onclick = () => (v.paused ? v.play() : v.pause());
+$("speed").onchange = () => { v.playbackRate = +$("speed").value; };
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "SELECT" || e.metaKey || e.ctrlKey) return;
+  const k = e.key.toLowerCase();
+  const acts = {
+    " ": () => $("play").click(), k: () => $("play").click(), j: () => step(-5), l: () => step(5),
+    arrowleft: () => step(-1), arrowright: () => step(1), ",": () => { v.pause(); step(-1 / 30); }, ".": () => { v.pause(); step(1 / 30); },
+    "1": () => $("q-light").click(), "2": () => $("q-full").click(), p: () => $("prev").click(), n: () => $("next").click(),
+    f: () => (document.fullscreenElement ? document.exitFullscreen() : v.requestFullscreen?.() || v.webkitEnterFullscreen?.()),
+  };
+  if (acts[k] && !$("stage").hidden) { e.preventDefault(); acts[k](); }
+});
+addEventListener("hashchange", () => { readHash(); if (token) start(); });
+
+/* ---------- start ---------- */
+let proxyReady = null;
+async function start() {
+  if (!items.length) { $("stage").hidden = true; $("welcome").hidden = false; $("welcome").querySelector(".muted").textContent = "Signed in. Open a clip or a post from the GoPro Travels Library to play it here."; $("signin2").hidden = true; return; }
+  proxyReady = proxyReady || registerProxy();
+  useProxy = await proxyReady;
+  $("stage").hidden = false; $("welcome").hidden = true;
+  load(false);
+}
+readHash();
+loadToken();
+if (token) { $("who").textContent = TEST_API ? "Test mode" : "Signed in"; start(); }
+else { $("welcome").hidden = false; $("signin").hidden = !items.length; initGoogle(); }
+</script>
+</body>
+</html>
