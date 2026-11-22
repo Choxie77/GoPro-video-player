@@ -34,7 +34,9 @@ async function stream(id, token, api, range) {
   }
   if (!r.ok && r.status !== 206) return new Response(r.statusText || "error", {status: r.status});
   const out = new Headers();
-  out.set("Content-Type", r.headers.get("Content-Type") || "video/mp4");
+  const ct = r.headers.get("Content-Type") || "";
+  // GoPro .LRV files come back as unknown binary; they are MP4 inside, and Safari won't play them unless told so
+  out.set("Content-Type", ct.startsWith("video/") ? ct : "video/mp4");
   out.set("Accept-Ranges", "bytes");
   const len = r.headers.get("Content-Length");
   if (len) out.set("Content-Length", len);
