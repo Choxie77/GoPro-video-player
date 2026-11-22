@@ -73,7 +73,7 @@ nav.tabs button[aria-current="page"] { background: var(--accent-soft); color: va
 .vbox video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; }
 .vbox video.back { visibility: hidden; }
 /* edit preview: a Claude edit from the Library, cut to the second and framed 9:16 like the final reel */
-.vbox.edit { aspect-ratio: 9/16; max-height: 82vh; width: auto; margin: 0 auto; }
+.vbox.edit { aspect-ratio: 9/16; width: min(100%, calc(82vh * 9 / 16)); max-height: none; margin: 0 auto; }
 .vbox.edit video { object-fit: cover; object-position: var(--x, 50%) 50%; }
 .vbox .ovl { position: absolute; left: 7%; right: 7%; top: 18%; text-align: center; color: #fff; font: 700 clamp(16px, 4.2vh, 34px)/1.2 system-ui, sans-serif;
   -webkit-text-stroke: 1px rgba(0,0,0,.5); paint-order: stroke fill; pointer-events: none; }
@@ -428,15 +428,17 @@ function applyShot(v, it) {
   $("shotno").hidden = !editMode; $("shotno").textContent = `Shot ${idx + 1} of ${items.length}`;
   if (editMode && it.speed) v.playbackRate = it.speed;
 }
+function endShotIfDone(v) {
+  const it = items[idx];
+  if (v !== va() || !editMode || !it?.end || v.paused || v.seeking) return false;
+  if (v.currentTime < it.end - 0.03) return false;
+  if (idx < items.length - 1) { idx++; load(false); } else { v.pause(); }
+  return true;
+}
 function watchEnd(v) {
   const tick = () => {
-    const it = items[idx];
-    if (v !== va() || !editMode || !it?.end) return;
-    if (v.currentTime >= it.end - 0.03) {
-      if (idx < items.length - 1) { idx++; load(false); } else { v.pause(); }
-      return;
-    }
-    if (!v.paused) (v.requestVideoFrameCallback ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(tick));
+    if (v !== va() || !editMode || endShotIfDone(v) || v.paused) return;
+    (v.requestVideoFrameCallback ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(tick));
   };
   tick();
 }
@@ -510,6 +512,7 @@ vids.forEach((v) => {
   v.addEventListener("loadedmetadata", () => { if (v === va()) updateInfo(); });
   v.addEventListener("waiting", () => { if (v === va()) $("buf").hidden = false; });
   v.addEventListener("playing", () => { if (v === va()) { $("buf").hidden = true; $("playbtn").textContent = "❚❚"; watchEnd(v); } });
+  v.addEventListener("timeupdate", () => endShotIfDone(v));  // frame callbacks stop when the video isn't drawn (background tab)
   v.addEventListener("canplay", () => { if (v === va()) $("buf").hidden = true; });
   v.addEventListener("pause", () => { if (v === va()) $("playbtn").textContent = "▶"; });
   v.addEventListener("ended", () => { if (v === va() && $("auto").checked && idx < items.length - 1) { idx++; load(false); } });
