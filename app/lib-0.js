@@ -137,7 +137,7 @@ function drawGlobe3D(stops, cur, started) {
   const resolve0 = (n) => { const k = norm(n); return topoBy.get(k) || (ALIAS[k] && topoBy.get(norm(ALIAS[k]))) || k; };
   // Countries on the route that have no clips imported yet: shown softer, and they switch to bold on their own once footage lands.
   // Edit this list to match the trip.
-  const TRIP_PLAN = ["Thailand", "Vietnam", "China", "Japan", "Slovenia", "Laos", "Hong Kong"];
+  const TRIP_PLAN = (window.__GTA_OWNER && window.__GTA_OWNER.plan) || (typeof DATA !== "undefined" && DATA.summary && DATA.summary.trip_plan) || [];   // from config/trip_plan.json via the private data, so the public site carries no place names
   const PLAN_PINS = {"Hong Kong": [114.17, 22.32]};   // places too small for the world map get a dot at these [lon, lat]
   const filmed = [...new Set((typeof COUNTRY_ORDER !== "undefined" ? COUNTRY_ORDER : []).filter(Boolean))];
   const planned = TRIP_PLAN.filter((n) => !filmed.some((f) => norm(f) === norm(n) || resolve0(f) === resolve0(n)));
