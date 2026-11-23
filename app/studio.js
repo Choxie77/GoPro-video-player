@@ -15,7 +15,7 @@
     audio: {"": "Claude decides", original: "Original", voiceover: "Voiceover", music: "Music", mix: "Original + music"},
     captions: {"": "Claude decides", none: "None", keywords: "Key words", speech: "Subtitles", story: "Story lines"},
   };
-  const ui = {post: null, view: "brief", sel: null, t: 0, filter: "all", day: "near", shown: PAGE, undo: [], sig: "", list: []};
+  const ui = {post: null, view: "brief", sel: null, t: 0, filter: "all", day: "near", shown: PAGE, undo: [], sig: "", list: [], reqNote: ""};
   const q = (s, r = document) => r.querySelector(s);
   const len = (s) => s >= 60 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : `${(+s || 0).toFixed(1)} s`;
   const clipName = (c) => c?.title || (c ? `${c.region || c.city || "Clip"} ${c.t.slice(11, 16)}` : "Missing clip");
@@ -113,10 +113,33 @@
     .sx-edit { max-width: 1080px; margin: 0 auto; padding: 20px; display: grid; gap: 14px; }
     .sx-wait { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--ink); border-radius: 7px; font-size: 14px; }
     .sx-count { justify-self: end; font-size: 12px; font-weight: 400; color: var(--muted); }
+    .sx-flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .sx-flow li { display: grid; gap: 1px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-size: 12px; }
+    .sx-flow li b { font-size: 13px; }
+    .sx-flow li.now { color: var(--ink); border-color: var(--ink); }
+    .sx-flow li.done { color: var(--ink); background: var(--surface); }
+    .sx-req { max-width: 1040px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
+    .sx-req h2 { margin: 0; font-size: 20px; } .sx-req h3 { margin: 0 0 6px; font-size: 14px; }
+    .sx-req .lede { margin: 4px 0 0; color: var(--muted); font-size: 14px; max-width: 70ch; }
+    .sx-ready { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .sx-ready li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; font-size: 13px; }
+    .sx-ready i { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 5px; font-style: normal; font-size: 12px; font-weight: 700; border: 1px solid var(--line); }
+    .sx-ready .ok i { color: var(--surface); background: var(--ink); border-color: var(--ink); }
+    .sx-ready .block { border-color: var(--warn); } .sx-ready .block i { color: var(--warn); border-color: var(--warn); }
+    .sx-ready .tip i { color: var(--ink); }
+    .sx-card2 { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); display: grid; gap: 10px; }
+    .sx-sum { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; margin: 0; font-size: 13px; }
+    .sx-sum dt { color: var(--muted); } .sx-sum dd { margin: 0; overflow-wrap: anywhere; } .sx-sum dd.auto { color: var(--muted); font-style: italic; }
+    .sx-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; }
+    .sx-mini li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+    .sx-mini li span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .sx-ctl { display: grid; gap: 4px; font-size: 13px; font-weight: 600; } .sx-ctl small { font-weight: 400; color: var(--muted); }
+    .sx-wait.big { align-items: flex-start; padding: 16px; } .sx-wait.big p { margin: 4px 0; color: var(--muted); font-size: 13px; }
+    .sx-wait pre { margin: 8px 0 0; padding: 8px 10px; white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace; background: var(--bg); border-radius: 6px; }
     @media (max-width: 900px) {
       .sx-head { flex-wrap: wrap; } .sx-title { order: 3; flex-basis: 100%; }
       .sx-rail button { grid-template-columns: 1fr; padding: 7px 4px; justify-items: center; } .sx-rail i { grid-row: auto; } .sx-rail span { display: none; }
-      .sx-two { grid-template-columns: minmax(0, 1fr); }
+      .sx-two { grid-template-columns: minmax(0, 1fr); } .sx-flow { grid-template-columns: 1fr; }
       #st-moments { display: flex; flex-direction: column; height: auto; }
       .sx-pool { border-right: 0; order: 2; } .sx-grid { max-height: 52dvh; grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .sx-ins { order: 1; padding: 12px 16px; } .sx-tl { order: 3; position: sticky; bottom: 0; }
@@ -147,7 +170,7 @@
     if (waiting(p)) return ["Copy edit command", () => copy("edit the requested posts", "Copied. Paste it into Claude Code")];
     if (p.items.length < need) return ["Add moments", () => show("moments")];
     if (untrimmed(p)) return [`Pick best seconds (${untrimmed(p)})`, () => { show("moments"); autoPick(); }];
-    return ["Request edit", async () => { show("edit"); await askClaude("first"); }];
+    return ["Review edit request", () => show("edit")];
   }
   function stepNote(k, p) {
     const vers = p.id ? editsOf(p.id) : [];
@@ -171,7 +194,7 @@
   /* ---------- frame ---------- */
   drawPost = function () {
     const p = draft;
-    if (ui.post !== p) Object.assign(ui, {post: p, view: homeView(p), sel: null, t: 0, filter: "all", day: "near", shown: PAGE, undo: []});
+    if (ui.post !== p) Object.assign(ui, {post: p, view: homeView(p), sel: null, t: 0, filter: "all", day: "near", shown: PAGE, undo: [], reqNote: ""});
     $("pdlg").classList.add("studio");
     $("pdetail").innerHTML = `
       <header class="sx-head">
@@ -492,19 +515,93 @@
   });
 
   /* ---------- edit step ---------- */
+  const ORDER = [["", "Claude decides"], ["keep", "Keep my order"], ["free", "Claude may reorder"]];
+  const SCOPE = [["", "Claude decides"], ["mine", "Only my moments"], ["add", "May add B-roll"]];
+  const ago = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return Number.isFinite(m) ? (m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`) : ""; };
+  // What the material really comes to: a whole clip counts as the best seconds Claude (or "Pick best seconds") would take, not its full length.
+  const material = (p) => p.items.reduce((a, it) => { if (it.a != null) return a + itemLen(it); const r = bestRange(byId.get(it.clip)); return a + (r ? r[1] - r[0] : itemLen(it)); }, 0);
+  function readiness(p) {
+    const need = p.kind === "reel" ? 2 : 1, target = +p.brief.length || 0, have = material(p), n = untrimmed(p), out = [];
+    out.push((p.title || "").trim() ? {s: "ok", t: "The post has a name"} : {s: "block", t: "Give the post a name", a: ["Name it", () => q("#p-title").focus()]});
+    out.push(p.items.length >= need ? {s: "ok", t: `${p.items.length} moment${p.items.length === 1 ? "" : "s"} chosen`} : {s: "block", t: `Add at least ${need} moment${need > 1 ? "s" : ""}`, a: ["Add moments", () => show("moments")]});
+    out.push((p.brief.story || "").trim() ? {s: "ok", t: "The story is written"} : {s: "tip", t: "No story yet. Claude cuts toward the story, so this is the most useful thing to add.", a: ["Write it", () => show("brief")]});
+    out.push(n ? {s: "tip", t: `${n} clip${n > 1 ? "s have" : " has"} no seconds picked. Claude will choose, or you can now.`, a: ["Pick best seconds", () => { autoPick(); drawEdit(); }]} : {s: "ok", t: "Every moment has its seconds picked"});
+    if (!target) out.push({s: "tip", t: "No target length, so Claude decides.", a: ["Set length", () => show("brief")]});
+    else if (have < target) out.push({s: "tip", t: `${len(have)} of material for a ${target} s post: a little short.`, a: ["Add moments", () => show("moments")]});
+    else if (have > target * 3) out.push({s: "tip", t: `${len(have)} of material for a ${target} s post. Claude has to drop most of it, so trim or remove moments you don't need.`, a: ["Review moments", () => show("moments")]});
+    else out.push({s: "ok", t: `${len(have)} of material for a ${target} s post`});
+    return out;
+  }
+  const mark = {ok: "✓", block: "!", tip: "·"};
+  function noteText(p) {
+    const b = p.brief, c = [];
+    if (b.order === "keep") c.push("Keep my moments in the order I put them.");
+    if (b.order === "free") c.push("You may reorder the moments for the best story.");
+    if (b.scope === "mine") c.push("Use only my moments, no other footage.");
+    if (b.scope === "add") c.push("You may add B-roll from the same days where it helps.");
+    return [ui.reqNote.trim(), c.length ? "Controls: " + c.join(" ") : ""].filter(Boolean).join("\n\n");
+  }
+  const flow = (step) => `<ol class="sx-flow" aria-label="How an edit happens">${[["Prepare", "Brief and moments, on this page"], ["Send", "Paste one command into Claude Code"], ["Review", "The edit appears here as a version"]].map(([t, d], i) => `<li class="${i + 1 < step ? "done" : i + 1 === step ? "now" : ""}"><b>${i + 1} · ${t}</b><span>${d}</span></li>`).join("")}</ol>`;
+  function waitBox(p, big) {
+    const info = window.__requestInfo?.(p.id), sent = (info?.note || "").trim();
+    const el = document.createElement("div"); el.className = "sx-wait" + (big ? " big" : "");
+    el.innerHTML = `<div style="min-width:0"><b>Waiting for Claude Code.</b> ${big ? "" : "Paste the command there and this version appears here."}
+      ${big ? `<p>Open Claude Code in your project and paste <b>edit the requested posts</b>. It reads this post, makes the edit and saves it. This page updates by itself, no reload needed.</p>` : ""}
+      ${info?.at ? `<p>Requested ${esc(new Date(info.at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}))} · ${esc(ago(info.at))}${info.mode && info.mode !== "first" ? ` · ${esc(info.mode)}` : ""}</p>` : ""}
+      ${big && sent ? `<details><summary class="muted small">What you sent</summary><pre>${esc(sent)}</pre></details>` : ""}</div>
+      <div class="sx-acts"><button class="sx-btn main" data-w="copy">Copy command</button>${window.__requestCancel ? `<button class="sx-btn" data-w="cancel">Cancel request</button>` : ""}</div>`;
+    q('[data-w="copy"]', el).onclick = () => copy("edit the requested posts", "Copied. Paste it into Claude Code");
+    const c = q('[data-w="cancel"]', el);
+    if (c) c.onclick = async () => { c.disabled = true; await window.__requestCancel(p.id); drawEdit(); drawChrome(); };
+    return el;
+  }
+  function drawRequest(p) {
+    const box = $("st-edit"), br = p.brief, rd = readiness(p), blocked = rd.some((r) => r.s === "block"), isWaiting = waiting(p);
+    const dv = (v, f) => (v ? `<dd>${esc(f ? f(v) : v)}</dd>` : `<dd class="auto">Claude decides</dd>`);
+    const sum = [["Story", dv((br.story || "").trim())], ["Length", dv(br.length, (v) => `${v} s`)], ["Shape", dv(br.aspect, (v) => SHORT.aspect[v] || v)], ["Pace", dv(br.pace, (v) => SHORT.pace[v] || v)],
+      ["Sound", dv(br.audio, (v) => SHORT.audio[v] || v)], ["Text", dv(br.captions, (v) => SHORT.captions[v] || v)], ["Mood", dv((br.mood || "").trim())], ["Include", dv((br.include || "").trim())], ["Avoid", dv((br.avoid || "").trim())]]
+      .map(([k, v]) => `<dt>${k}</dt>${v}`).join("");
+    const mini = p.items.slice(0, 14).map((it, i) => {
+      const c = byId.get(it.clip), r = it.a == null ? bestRange(c) : null;
+      const span = it.a != null ? `${fmtT(it.a)}–${fmtT(it.b ?? c?.dur ?? it.a)} · ${len(itemLen(it))}` : `whole ${len(itemLen(it))}${r ? ` → best ${len(r[1] - r[0])}` : ""}`;
+      return `<li><span class="muted">${i + 1}</span><span>${esc(clipName(c))}${it.role ? ` <span class="muted">· ${esc(ROLES[it.role] || it.role)}</span>` : ""}</span><span>${esc(span)}</span></li>`;
+    }).join("") + (p.items.length > 14 ? `<li><span></span><span class="muted">+ ${p.items.length - 14} more</span><span></span></li>` : "");
+    const ctl = (k, opts) => `<div class="sx-seg" data-ctl="${k}">${opts.map(([x, n]) => `<button type="button" data-x="${x}" aria-pressed="${String(br[k] ?? "") === x}">${n}</button>`).join("")}</div>`;
+    const left = isWaiting ? `<div id="sx-waitslot"></div>` : `
+      <div class="sx-card2"><h3>Before you send</h3><ul class="sx-ready">${rd.map((r, i) => `<li class="${r.s}"><i>${mark[r.s]}</i><span>${esc(r.t)}</span>${r.a ? `<button class="sx-btn" data-r="${i}">${esc(r.a[0])}</button>` : "<span></span>"}</li>`).join("")}</ul></div>
+      <div class="sx-card2"><h3>How much control to give Claude</h3>
+        <div class="sx-ctl">Moment order${ctl("order", ORDER)}</div>
+        <div class="sx-ctl">Footage${ctl("scope", SCOPE)}</div>
+        <label class="sx-ctl">Anything else for this edit <small>Optional. For example: open on the tuk-tuk, end on the sunset.</small><textarea id="sx-reqnote" style="min-height:70px">${esc(ui.reqNote)}</textarea></label></div>
+      <div class="sx-acts"><button class="sx-btn main" id="sx-send" ${blocked ? "disabled" : ""}>Send edit request</button><span class="muted small">${blocked ? "Fix the items marked ! first." : "Nothing is edited yet: this asks Claude Code to make a version for you to review."}</span></div>`;
+    box.innerHTML = `<div class="sx-req">
+      <div><h2>${isWaiting ? "Edit requested" : "Request the edit"}</h2><p class="lede">Claude Code reads your brief and moments, then writes the shot order, in and out points, framing, speed and any text on screen. You review the result here and ask for changes.</p></div>
+      ${flow(isWaiting ? 2 : 1)}
+      <div class="sx-two"><div class="sx-stack">${left}</div>
+        <div class="sx-stack"><div class="sx-card2"><h3>What Claude will receive</h3><dl class="sx-sum">${sum}</dl><div class="sx-acts"><button class="sx-btn" data-go="brief">Change brief</button></div></div>
+          <div class="sx-card2"><h3>Moments · ${p.items.length} · ${len(total(p))} as picked</h3>${p.items.length ? `<ul class="sx-mini">${mini}</ul>` : `<p class="muted small">None yet.</p>`}<div class="sx-acts"><button class="sx-btn" data-go="moments">Change moments</button></div></div></div></div></div>`;
+    if (isWaiting) q("#sx-waitslot").replaceWith(waitBox(p, true));
+    box.querySelectorAll("[data-go]").forEach((b) => { b.onclick = () => show(b.dataset.go); });
+    box.querySelectorAll("[data-r]").forEach((b) => { b.onclick = () => rd[+b.dataset.r].a[1](); });
+    box.querySelectorAll("[data-ctl]").forEach((g) => { g.onclick = (e) => { const b = e.target.closest("[data-x]"); if (!b) return; draft.brief[g.dataset.ctl] = b.dataset.x; g.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b)); queueSave(); }; });
+    if ($("sx-reqnote")) $("sx-reqnote").oninput = (e) => { ui.reqNote = e.target.value; };
+    if ($("sx-send")) $("sx-send").onclick = async () => {
+      const b = $("sx-send"); b.disabled = true;
+      await persist();
+      if (!draft.id) { toast("Name the post first so it can be saved", true); b.disabled = false; return; }
+      await window.__requestEdit(draft.id, "first", noteText(draft));
+      drawEdit(); drawChrome();
+    };
+  }
   drawEdit = function () {
     if (!draft) return;
     if (!$("st-edit")) { drawChrome(); return; }
     baseEdit();
-    const intro = q("#st-edit .ed-intro > p.muted");
-    if (intro) intro.textContent = "Claude Code reads your brief and moments, then writes the shot order, in and out points, framing, speed and any on-screen text. Each result appears here as a version.";
+    if (!curEdit()) { drawRequest(draft); drawChrome(); return; }
+    // A version exists: keep the review screen, but make the wait for a revision clear.
     if (waiting(draft)) {
-      q("#st-edit .ed-intro .row")?.remove(); q("#st-edit .ed-intro > h3")?.remove(); intro?.remove();
       const msg = q("#st-edit #ed-msg"); if (msg) msg.textContent = "";
-      const bar = document.createElement("div"); bar.className = "sx-wait";
-      bar.innerHTML = `<span><b>Waiting for Claude Code.</b> Paste the command there and this version appears here.</span><button class="sx-btn main">Copy command</button>`;
-      q("button", bar).onclick = () => copy("edit the requested posts", "Copied. Paste it into Claude Code");
-      q("#st-edit").prepend(bar);
+      q("#st-edit").prepend(waitBox(draft, false));
     }
     drawChrome();
   };

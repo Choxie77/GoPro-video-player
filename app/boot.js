@@ -271,6 +271,12 @@
     const when = new Date(r.at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
     return `Edit requested at ${when}. Tell Claude Code: edit the requested posts.`;
   };
+  window.__requestInfo = (post) => state.docs.requests?.[post] || null;
+  window.__requestCancel = async (post) => {
+    const r = state.docs.requests?.[post]; if (r?.status !== "waiting") return;
+    await db.collection("requests").doc(post).set({...r, status: "cancelled", cancelledAt: new Date().toISOString()});
+    toast("Request cancelled");
+  };
   window.__requestEdit = async (post, mode, note) => {
     await db.collection("requests").doc(post).set({post, mode, note: note || "", status: "waiting", at: new Date().toISOString()});
     toast("Edit requested. Tell Claude Code: edit the requested posts");
