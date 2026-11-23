@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>GoPro Travels Player</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Public+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* A screening room: picture first, one quiet control bar, the library a click away. Deliberately dark only. */
+:root {
+  --bg: #0b1014; --panel: #141c23; --panel2: #1a242d; --ink: #e6edf2; --muted: #8fa0ad; --line: #24313b;
+  --accent: #4cc3cb; --accent-soft: #123a3e; --warn: #f0b45a; --bad: #f08a83;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "Public Sans", "Helvetica Neue", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); }
+body { padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.wrap { max-width: 1500px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font: 700 19px/1.2 var(--display); margin: 0; letter-spacing: -0.01em; }
+h2 { font: 700 17px/1.25 var(--display); margin: 0; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+button, select, input { font: inherit; color: inherit; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 12px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.btn:disabled { opacity: .4; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type=search], select.f { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+nav.tabs { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+nav.tabs button { border: 0; background: transparent; padding: 6px 14px; border-radius: 7px; cursor: pointer; font-weight: 600; color: var(--muted); }
+nav.tabs button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+.grow { flex: 1; }
+.note { background: #3a2c16; color: var(--warn); padding: 8px 12px; border-radius: 8px; font-size: 13px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.note.bad { background: #3d1f1d; color: var(--bad); }
+.center { min-height: 60vh; display: grid; place-items: center; text-align: center; }
+.center > div { display: grid; gap: 12px; max-width: 46ch; justify-items: center; }
+.big { font: 700 20px/1.25 var(--display); }
+
+/* library */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: sticky; top: 0; z-index: 4; background: var(--bg); padding-block: 8px; }
+.filters input[type=search] { flex: 1 1 240px; }
+.toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+.selbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 8px 12px; position: sticky; bottom: 12px; z-index: 5; }
+.day { display: grid; gap: 10px; margin-bottom: 22px; }
+.day h2 span { color: var(--muted); font: 400 13px var(--body); margin-left: 8px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.card { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: pointer; text-align: left; padding: 0; display: grid; }
+.card:hover { border-color: var(--accent); }
+.card.sel { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+.thumb { aspect-ratio: 16/9; background-color: #05080a; background-repeat: no-repeat; position: relative; }
+.thumb .dur { position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,.72); color: #fff; font: 500 11px/1 var(--mono); padding: 3px 5px; border-radius: 4px; }
+.thumb .q { position: absolute; left: 6px; bottom: 6px; background: rgba(0,0,0,.72); color: var(--accent); font: 600 10px/1 var(--mono); padding: 3px 5px; border-radius: 4px; }
+.pick { position: absolute; left: 6px; top: 6px; width: 24px; height: 24px; border-radius: 6px; border: 2px solid #fff; background: rgba(0,0,0,.45); display: grid; place-items: center; font-weight: 700; font-size: 13px; color: var(--bg); }
+.card.sel .pick { background: var(--accent); border-color: var(--accent); }
+.card .body { padding: 8px 10px 10px; display: grid; gap: 3px; min-width: 0; }
+.card .t { font-weight: 600; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+.card .m { font-size: 12px; color: var(--muted); }
+.empty { color: var(--muted); padding: 40px 0; text-align: center; }
+
+/* single player */
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .stage { grid-template-columns: 1fr; } }
+.screen { display: grid; gap: 10px; min-width: 0; }
+.vbox { position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 16/9; max-height: 78vh; }
+.vbox video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; }
+.vbox video.back { visibility: hidden; }
+/* edit preview: a Claude edit from the Library, cut to the second and framed 9:16 like the final reel */
+.vbox.edit { aspect-ratio: 9/16; width: min(100%, calc(82vh * 9 / 16)); max-height: none; margin: 0 auto; }
+.vbox.edit video { object-fit: cover; object-position: var(--x, 50%) 50%; }
+.vbox .ovl { position: absolute; left: 7%; right: 7%; top: 18%; text-align: center; color: #fff; font: 700 clamp(16px, 4.2vh, 34px)/1.2 system-ui, sans-serif;
+  -webkit-text-stroke: 1px rgba(0,0,0,.5); paint-order: stroke fill; pointer-events: none; }
+.vbox .shotno { position: absolute; left: 8px; top: 8px; background: rgba(0,0,0,.6); color: #fff; font: 500 12px system-ui; padding: 3px 7px; border-radius: 6px; }
+.buf { position: absolute; left: 12px; top: 12px; background: rgba(0,0,0,.65); color: #fff; font: 500 12px var(--mono); padding: 4px 8px; border-radius: 6px; pointer-events: none; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 7px 11px; cursor: pointer; font-weight: 600; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
+.seg button:disabled { opacity: .35; cursor: default; }
+.title { font: 700 18px/1.25 var(--display); margin: 0; overflow-wrap: anywhere; }
+.info { font-size: 13px; }
+aside { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 4px; max-height: 80vh; overflow: auto; align-content: start; }
+.item { display: grid; grid-template-columns: 88px 1fr; gap: 8px; text-align: left; border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 6px; cursor: pointer; align-items: center; }
+.item:hover { border-color: var(--line); }
+.item[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.item .thumb { border-radius: 4px; }
+.item .t { overflow-wrap: anywhere; font-size: 13px; }
+.keys { font-size: 12px; }
+kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; color: var(--ink); }
+
+/* multi-view */
+.mgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.mgrid.n1 { grid-template-columns: 1fr; }
+@media (max-width: 700px) { .mgrid { grid-template-columns: 1fr; } }
+.tile { position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 16/9; border: 2px solid transparent; cursor: pointer; }
+.tile.audio { border-color: var(--accent); }
+.tile video { width: 100%; height: 100%; display: block; }
+.tile .cap { position: absolute; left: 8px; bottom: 8px; right: 8px; display: flex; gap: 6px; align-items: center; justify-content: space-between; }
+.tile .cap span { background: rgba(0,0,0,.7); color: #fff; font-size: 12px; padding: 3px 7px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile .cap .snd { color: var(--accent); font-weight: 700; }
+.mbar input[type=range] { flex: 1 1 260px; accent-color: var(--accent); min-width: 0; }
+</style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>GoPro Travels Player</h1>
+    <nav class="tabs" aria-label="Views">
+      <button data-v="lib">Library</button>
+      <button data-v="play">Player</button>
+      <button data-v="multi">Multi-view</button>
+    </nav>
+    <span class="grow"></span>
+    <span class="muted" id="who" style="font-size:13px"></span>
+    <button class="btn" id="signin" hidden>Sign in with Google</button>
+  </header>
+  <div class="note" id="note" hidden></div>
+
+  <div id="welcome" class="center" hidden><div>
+    <p class="big">Your GoPro journey, streamed from Google Drive</p>
+    <p class="muted">Sign in with the Google account that owns the Drive. The player only reads your Drive; nothing is saved on this device.</p>
+    <button class="btn primary" id="signin2">Sign in with Google</button>
+  </div></div>
+
+  <!-- LIBRARY -->
+  <section id="v-lib" hidden>
+    <div class="filters">
+      <input type="search" id="q" placeholder="Search what happens, place, date…" aria-label="Search clips">
+      <select class="f" id="country" aria-label="Country"></select>
+      <select class="f" id="scene" aria-label="Scene"></select>
+      <label class="toggle"><input type="checkbox" id="hl"> Highlights</label>
+      <label class="toggle"><input type="checkbox" id="junk" checked> Hide short / dark</label>
+      <label class="toggle"><input type="checkbox" id="pre"> Before the trip</label>
+      <span class="muted mono" id="count" style="font-size:13px"></span>
+    </div>
+    <div id="lib"></div>
+    <div class="selbar" id="selbar" hidden>
+      <b id="selcount"></b><span class="grow"></span>
+      <button class="btn primary" id="sel-play">▶ Play in order</button>
+      <button class="btn" id="sel-multi">Multi-view</button>
+      <button class="btn" id="sel-clear">Clear</button>
+    </div>
+  </section>
+
+  <!-- SINGLE PLAYER -->
+  <section id="v-play" hidden>
+    <div class="stage">
+      <div class="screen">
+        <div class="vbox" id="vbox">
+          <video id="va" playsinline preload="auto" controls></video>
+          <video id="vb" class="back" playsinline preload="auto" muted></video>
+          <span class="buf" id="buf" hidden>Loading…</span>
+          <div class="ovl" id="ovl" hidden></div><span class="shotno" id="shotno" hidden></span>
+        </div>
+        <div class="bar">
+          <div class="seg" role="group" aria-label="Quality">
+            <button id="q-light" title="540p copy: starts instantly (key 1)">Light</button>
+            <button id="q-hd" title="1080p copy: sharp and smooth (key 2)">HD</button>
+            <button id="q-full" title="The original file: needs fast Wi-Fi (key 3)">Full</button>
+          </div>
+          <button class="btn" id="prev" title="Previous clip (P)">⏮</button>
+          <button class="btn" id="back" title="Back 5 s (J)">−5s</button>
+          <button class="btn" id="playbtn" title="Play / pause (K or Space)">▶</button>
+          <button class="btn" id="fwd" title="Forward 5 s (L)">+5s</button>
+          <button class="btn" id="next" title="Next clip (N)">⏭</button>
+          <select class="btn" id="speed" aria-label="Speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option></select>
+          <span class="grow"></span>
+          <label class="toggle"><input type="checkbox" id="auto" checked> Play next automatically</label>
+        </div>
+        <div style="display:grid;gap:4px"><p class="title" id="title"></p><p class="info muted mono" id="info"></p></div>
+        <p class="keys muted"><kbd>K</kbd>/<kbd>Space</kbd> play · <kbd>J</kbd> <kbd>L</kbd> ±5 s · <kbd>←</kbd> <kbd>→</kbd> ±1 s · <kbd>,</kbd> <kbd>.</kbd> one frame · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Light / HD / Full · <kbd>P</kbd> <kbd>N</kbd> previous / next · <kbd>F</kbd> full screen</p>
+      </div>
+      <aside id="queue" aria-label="Queue"></aside>
+    </div>
+  </section>
+
+  <!-- MULTI-VIEW -->
+  <section id="v-multi" hidden>
+    <div style="display:grid;gap:10px">
+      <div class="bar mbar">
+        <button class="btn primary" id="m-play">▶ Play all</button>
+        <button class="btn" id="m-restart">⟲ From start</button>
+        <input type="range" id="m-seek" min="0" max="100" step="0.1" value="0" aria-label="Position in all clips">
+        <span class="mono muted" id="m-time" style="font-size:13px">0:00</span>
+        <div class="seg" role="group" aria-label="Multi-view quality"><button id="m-light">Light</button><button id="m-hd">HD</button></div>
+      </div>
+      <div class="mgrid" id="mgrid"></div>
+      <p class="muted" style="font-size:13px">Click a clip to hear its sound (or press 1–4). Double-click to open it in the player. Pick 2–4 clips in the Library and press Multi-view.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+// Public by design: identifies this app to Google's sign-in.
+const CLIENT_ID = "231539038852-tnr10gin3klaserl2h90qkrdeq1odskf.apps.googleusercontent.com";
+const SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const fmt = (s) => { if (!isFinite(s)) return ""; const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`; };
+const qs = new URLSearchParams(location.search);
+const TEST_API = qs.get("api"); // local testing only: a stand-in Drive API
+const API = TEST_API || "https://www.googleapis.com/drive/v3/files/";
+const store = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+
+let token = null, tokenExpires = 0, tokenClient = null;
+
+/* ================= sign-in ================= */
+function saveToken() { try { sessionStorage.setItem("gtp-token", JSON.stringify({token, tokenExpires})); } catch (e) {} }
+function loadToken() {
+  if (TEST_API) { token = qs.get("token") || "test"; tokenExpires = Date.now() + 864e5; return; }
+  try { const s = JSON.parse(sessionStorage.getItem("gtp-token") || "null"); if (s && s.tokenExpires > Date.now() + 60e3) ({token, tokenExpires} = s); } catch (e) {}
+}
+function initGoogle() {
+  if (TEST_API || tokenClient) return true;
+  if (!window.google?.accounts?.oauth2) return false;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID, scope: SCOPE,
+    callback: (r) => {
+      if (r.error) return note("Google sign-in didn't complete. Try again.", true);
+      token = r.access_token; tokenExpires = Date.now() + (r.expires_in - 60) * 1000; saveToken();
+      signedIn();
+    },
+  });
+  return true;
+}
+function signIn() { if (!initGoogle()) return setTimeout(signIn, 300); tokenClient.requestAccessToken({prompt: ""}); }
+$("signin").onclick = signIn; $("signin2").onclick = signIn;
+function note(msg, bad, action) {
+  const n = $("note"); n.hidden = !msg; n.className = "note" + (bad ? " bad" : "");
+  n.innerHTML = msg ? `<span>${esc(msg)}</span>` : "";
+  if (action) { const b = document.createElement("button"); b.className = "btn"; b.textContent = action[0]; b.onclick = action[1]; n.appendChild(b); }
+}
+function sessionCheck() {
+  if (!TEST_API && token && Date.now() > tokenExpires - 120e3) note("Your Google session is about to end.", false, ["Keep watching", signIn]);
+}
+setInterval(sessionCheck, 30e3);
+
+/* ================= Drive API ================= */
+async function api(path, params = {}, asBlob) {
+  const base = path ? API + path : API.replace(/\/$/, "");
+  const url = base + "?" + new URLSearchParams({supportsAllDrives: "true", ...params});
+  const r = await fetch(url, {headers: {Authorization: `Bearer ${token}`}});
+  if (r.status === 401) { note("Your Google session ended. Sign in again to continue.", true, ["Sign in", signIn]); throw new Error("401"); }
+  if (!r.ok) throw new Error(`${r.status}`);
+  return asBlob ? r.blob() : r.json();
+}
+
+/* ================= streaming (service worker adds the token to range requests) ================= */
+let useProxy = true, proxyReady = null;
+async function registerProxy() {
+  if (!("serviceWorker" in navigator)) return false;
+  try {
+    await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) await new Promise((r) => { navigator.serviceWorker.addEventListener("controllerchange", r, {once: true}); setTimeout(r, 1500); });
+    return !!navigator.serviceWorker.controller;
+  } catch (e) { return false; }
+}
+function srcFor(id) {
+  const t = encodeURIComponent(token);
+  if (useProxy) return `stream/${id}?t=${t}${TEST_API ? `&api=${encodeURIComponent(TEST_API)}` : ""}`;
+  return `${API}${id}?alt=media&access_token=${t}`;
+}
+
+/* ================= library index + preview sheets from Drive ================= */
+let INDEX = null, SPRITES = new Map(), spriteUrls = new Map(), indexError = null;
+async function loadIndex() {
+  if (INDEX || indexError) return INDEX;
+  try {
+    const found = await api("", {q: "name='player_index.json' and trashed=false", fields: "files(id,parents,modifiedTime)", orderBy: "modifiedTime desc", pageSize: "5"});
+    const f = found.files?.[0];
+    if (!f) throw new Error("index not found");
+    INDEX = await api(f.id, {alt: "media"});
+    const parent = f.parents?.[0];
+    if (parent) {
+      const list = await api("", {q: `'${parent}' in parents and name contains 'gtl-sprite-' and trashed=false`, fields: "files(id,name)", pageSize: "1000"});
+      for (const s of list.files || []) SPRITES.set(s.name, s.id);
+    }
+    INDEX.byId = new Map(INDEX.clips.map((c) => [c.id, c]));
+    INDEX.byDrive = new Map(INDEX.clips.map((c) => [c.drive, c]));
+  } catch (e) { indexError = e; }
+  return INDEX;
+}
+async function spriteUrl(n) {
+  if (spriteUrls.has(n)) return spriteUrls.get(n);
+  const p = (async () => {
+    const id = SPRITES.get(`gtl-sprite-s${String(n).padStart(3, "0")}.jpg`);
+    if (!id) return null;
+    return URL.createObjectURL(await api(id, {alt: "media"}, true));
+  })();
+  spriteUrls.set(n, p);
+  return p;
+}
+async function paintThumb(el, c, k) {
+  if (!c?.sp || !INDEX) return;
+  const S = INDEX.sprite, [sheet, row, n] = c.sp;
+  const url = await spriteUrl(sheet); if (!url) return;
+  k = Math.max(0, Math.min(n - 1, k ?? Math.min(1, n - 1)));
+  el.style.backgroundImage = `url(${url})`;
+  el.style.backgroundSize = `${S.per_clip * 100}% ${S.per_sheet * 100}%`;
+  el.style.backgroundPosition = `${S.per_clip > 1 ? (k / (S.per_clip - 1)) * 100 : 0}% ${S.per_sheet > 1 ? (row / (S.per_sheet - 1)) * 100 : 0}%`;
+}
+const seen = new IntersectionObserver((ents) => ents.forEach((e) => {
+  if (!e.isIntersecting) return; seen.unobserve(e.target);
+  paintThumb(e.target, INDEX?.byId.get(e.target.dataset.id));
+}), {rootMargin: "300px"});
+
+/* ================= views ================= */
+const VIEWS = ["lib", "play", "multi"];
+let view = "lib";
+function show(v) {
+  view = v;
+  VIEWS.forEach((x) => { $("v-" + x).hidden = x !== v; });
+  document.querySelectorAll("nav.tabs button").forEach((b) => b.setAttribute("aria-current", b.dataset.v === v ? "page" : "false"));
+  if (v !== "play") va().pause();
+  if (v !== "multi") tiles.forEach((t) => t.v.pause());
+  if (v === "lib") renderLib();
+}
+document.querySelectorAll("nav.tabs button").forEach((b) => b.onclick = () => show(b.dataset.v));
+
+/* ================= LIBRARY ================= */
+const selected = [];
+const isJunk = (c) => (c.flags || []).some((f) => f === "short" || f === "dark" || f === "pocket");
+const fmtDay = (iso) => new Date(iso.slice(0, 10) + "T12:00").toLocaleDateString(undefined, {weekday: "short", day: "numeric", month: "short", year: "numeric"});
+let libFilled = false;
+function fillFilters() {
+  if (libFilled || !INDEX) return; libFilled = true;
+  const countries = [...new Set(INDEX.clips.map((c) => c.country).filter(Boolean))].sort();
+  $("country").innerHTML = `<option value="">All countries</option>` + countries.map((c) => `<option>${esc(c)}</option>`).join("");
+  const scenes = [...new Set(INDEX.clips.flatMap((c) => c.scenes || []))].sort();
+  $("scene").innerHTML = `<option value="">All scenes</option>` + scenes.map((c) => `<option>${esc(c)}</option>`).join("");
+}
+function filtered() {
+  const q = $("q").value.trim().toLowerCase(), co = $("country").value, sc = $("scene").value;
+  return INDEX.clips.filter((c) => {
+    if (!$("pre").checked && c.pre) return false;
+    if ($("junk").checked && isJunk(c)) return false;
+    if ($("hl").checked && !(c.hl >= 4)) return false;
+    if (co && c.country !== co) return false;
+    if (sc && !(c.scenes || []).includes(sc)) return false;
+    if (q) { const hay = `${c.name} ${c.title || ""} ${c.desc || ""} ${c.city || ""} ${c.region || ""} ${c.country || ""} ${(c.scenes || []).join(" ")} ${(c.tags || []).join(" ")} ${c.tx || ""}`.toLowerCase(); if (!q.split(/\s+/).every((w) => hay.includes(w))) return false; }
+    return true;
+  });
+}
+let libList = [], libShown = 0;
+function card(c) {
+  const sel = selected.indexOf(c.id);
+  const q = c.hd ? "HD" : c.pv ? "LIGHT" : "";
+  return `<button class="card${sel >= 0 ? " sel" : ""}" data-id="${esc(c.id)}">
+    <div class="thumb" data-id="${esc(c.id)}"><span class="pick" data-pick="1" title="Select">${sel >= 0 ? sel + 1 : ""}</span>${q ? `<span class="q">${q}</span>` : ""}<span class="dur">${fmt(c.dur)}</span></div>
+    <div class="body"><span class="t">${esc(c.title || c.name)}</span><span class="m">${esc(c.t.slice(11, 16))} · ${esc(c.region || c.city || "Place unknown")}${(c.scenes || []).length ? " · " + esc(c.scenes[0]) : ""}</span></div></button>`;
+}
+async function renderLib(more) {
+  if (!INDEX) {
+    $("lib").innerHTML = `<p class="empty">${indexError ? "Couldn't load your clip library from Drive. Ask Claude to refresh the Library, then reload this page." : "Loading your clip library from Drive…"}</p>`;
+    if (indexError) return;
+    await loadIndex(); return renderLib();
+  }
+  fillFilters();
+  if (!more) { libList = filtered(); libShown = 0; $("lib").innerHTML = ""; }
+  $("count").textContent = `${libList.length.toLocaleString()} clips`;
+  if (!libList.length) { $("lib").innerHTML = `<p class="empty">No clips match.</p>`; return; }
+  const slice = libList.slice(libShown, libShown + 150); libShown += slice.length;
+  $("lib").querySelector(".more")?.remove();
+  const days = new Map();
+  for (const c of slice) { const d = c.t.slice(0, 10); if (!days.has(d)) days.set(d, []); days.get(d).push(c); }
+  for (const [d, cs] of days) {
+    const ex = $("lib").querySelector(`.day[data-d="${d}"] .grid`);
+    if (ex) { ex.insertAdjacentHTML("beforeend", cs.map(card).join("")); continue; }
+    const all = libList.filter((c) => c.t.slice(0, 10) === d);
+    const places = [...new Set(all.map((c) => c.region || c.city).filter(Boolean))].join(", ");
+    $("lib").insertAdjacentHTML("beforeend", `<section class="day" data-d="${d}"><h2>${cs[0].pre ? "Before the trip" : "Day " + cs[0].day} · ${fmtDay(d)}<span>${esc(places)} · ${all.length} clips</span></h2>
+      <div class="grid">${cs.map(card).join("")}</div></section>`);
+  }
+  if (libShown < libList.length) $("lib").insertAdjacentHTML("beforeend", `<button class="btn more" style="display:block;margin:0 auto">Show more</button>`);
+  $("lib").querySelectorAll(".thumb[data-id]").forEach((t) => { if (!t.style.backgroundImage) seen.observe(t); });
+}
+["q", "country", "scene", "hl", "junk", "pre"].forEach((id) => $(id).addEventListener(id === "q" ? "input" : "change", () => renderLib()));
+$("lib").addEventListener("click", (e) => {
+  if (e.target.closest(".more")) return renderLib(true);
+  const cardEl = e.target.closest(".card"); if (!cardEl) return;
+  const id = cardEl.dataset.id;
+  if (e.target.closest("[data-pick]") || e.shiftKey || e.metaKey || e.ctrlKey) {
+    const i = selected.indexOf(id); i >= 0 ? selected.splice(i, 1) : selected.push(id);
+    refreshSelection(); return;
+  }
+  const i = libList.findIndex((c) => c.id === id);
+  openQueue(libList.slice(i, i + 50).map(itemFromClip), 0);
+});
+// hover to scrub through the preview frames
+$("lib").addEventListener("mousemove", (e) => {
+  const t = e.target.closest(".thumb[data-id]"); if (!t) return;
+  const c = INDEX?.byId.get(t.dataset.id); if (!c?.sp) return;
+  const r = t.getBoundingClientRect();
+  paintThumb(t, c, Math.floor(((e.clientX - r.left) / r.width) * c.sp[2]));
+});
+$("lib").addEventListener("mouseout", (e) => { const t = e.target.closest?.(".thumb[data-id]"); if (t && !t.contains(e.relatedTarget)) paintThumb(t, INDEX?.byId.get(t.dataset.id)); });
+function refreshSelection() {
+  document.querySelectorAll("#lib .card").forEach((el) => {
+    const i = selected.indexOf(el.dataset.id);
+    el.classList.toggle("sel", i >= 0); el.querySelector(".pick").textContent = i >= 0 ? i + 1 : "";
+  });
+  $("selbar").hidden = !selected.length;
+  $("selcount").textContent = `${selected.length} selected`;
+  $("sel-multi").disabled = selected.length < 2 || selected.length > 4;
+  $("sel-multi").title = selected.length > 4 ? "Multi-view plays up to 4 clips" : "";
+}
+$("sel-play").onclick = () => openQueue(selected.map((id) => itemFromClip(INDEX.byId.get(id))), 0);
+$("sel-multi").onclick = () => openMulti(selected.map((id) => itemFromClip(INDEX.byId.get(id))));
+$("sel-clear").onclick = () => { selected.length = 0; refreshSelection(); };
+
+/* ================= SINGLE PLAYER (two videos: one plays, one loads the next) ================= */
+const itemFromClip = (c) => ({orig: c.drive, light: c.pv || "", hd: c.hd || "", title: c.title || c.name, start: 0, clip: c});
+let items = [], idx = 0, quality = store.get("gtp-q", "hd"), editMode = false;
+// Edit preview: frame 9:16 at the shot's x, show its text, play at its speed, stop at its end and cut to the next shot.
+function applyShot(v, it) {
+  $("vbox").classList.toggle("edit", editMode);
+  $("vbox").style.setProperty("--x", `${Math.round((it.x ?? 0.5) * 100)}%`);
+  $("ovl").hidden = !(editMode && it.text); $("ovl").textContent = it.text || "";
+  $("shotno").hidden = !editMode; $("shotno").textContent = `Shot ${idx + 1} of ${items.length}`;
+  if (editMode && it.speed) v.playbackRate = it.speed;
+}
+function endShotIfDone(v) {
+  const it = items[idx];
+  if (v !== va() || !editMode || !it?.end || v.paused || v.seeking) return false;
+  if (v.currentTime < it.end - 0.03) return false;
+  if (idx < items.length - 1) { idx++; load(false); } else { v.pause(); }
+  return true;
+}
+function watchEnd(v) {
+  const tick = () => {
+    if (v !== va() || !editMode || endShotIfDone(v) || v.paused) return;
+    (v.requestVideoFrameCallback ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(tick));
+  };
+  tick();
+}
+const vids = [$("va"), $("vb")]; let front = 0;
+const va = () => vids[front], vbk = () => vids[1 - front];
+function pickQuality(it) {
+  const order = {light: ["light", "hd", "orig"], hd: ["hd", "light", "orig"], full: ["orig"]}[quality] || ["hd", "light", "orig"];
+  for (const k of order) if (it[k]) return k;
+  return "orig";
+}
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const list = (h.get("list") || "").split("|").filter(Boolean).map((s) => {
+    const [orig, light, title, start, hd, end, x, text, speed] = s.split("~").map((x) => decodeURIComponent(x || ""));
+    return {orig, light, hd: hd || "", title: title || orig, start: Number(start) || 0,
+      end: Number(end) || 0, x: x === "" || x == null ? 0.5 : Number(x), text: text || "", speed: Number(speed) || 0};
+  });
+  editMode = h.get("edit") === "1";
+  if (h.get("q")) quality = {light: "light", hd: "hd", full: "full"}[h.get("q")] || quality;
+  return {list, i: Number(h.get("i")) || 0};
+}
+function openQueue(list, i) {
+  items = list.filter((x) => x && x.orig); idx = Math.max(0, Math.min(i, items.length - 1));
+  show("play"); load(false);
+}
+function writeHash() {
+  const list = items.map((it) => [it.orig, it.light, it.title, it.start, it.hd, it.end || "", it.x ?? "", it.text || "", it.speed || ""].map((x) => encodeURIComponent(x ?? "").replace(/~/g, "%7E")).join("~")).join("|");
+  history.replaceState(null, "", `#q=${quality}&i=${idx}${editMode ? "&edit=1" : ""}&list=${encodeURIComponent(list)}`);
+}
+function load(keepTime) {
+  const it = items[idx]; if (!it) return;
+  const key = pickQuality(it), id = it[key];
+  const v = va(), t = keepTime ? v.currentTime : it.start, wasPlaying = keepTime ? !v.paused : true;
+  const back = vbk();
+  if (!keepTime && back.dataset.id === id && back.readyState >= 2) {  // the next clip is already loaded: swap instantly
+    v.pause(); v.controls = false; v.muted = true; v.classList.add("back");
+    front = 1 - front; const nv = va();
+    nv.classList.remove("back"); nv.muted = false; nv.controls = true; nv.currentTime = it.start || 0; nv.playbackRate = +$("speed").value;
+    nv.play().catch(() => {});
+  } else {
+    v.src = srcFor(id); v.dataset.id = id; v.playbackRate = +$("speed").value;
+    v.addEventListener("loadedmetadata", () => { if (t) v.currentTime = t; if (wasPlaying) v.play().catch(() => {}); }, {once: true});
+  }
+  $("title").textContent = it.title;
+  applyShot(va(), it);
+  updateInfo();
+  for (const [btn, k] of [["q-light", "light"], ["q-hd", "hd"], ["q-full", "orig"]]) {
+    $(btn).disabled = !it[k]; $(btn).setAttribute("aria-pressed", key === k);
+  }
+  $("prev").disabled = idx === 0; $("next").disabled = idx >= items.length - 1;
+  note(""); drawQueue(); writeHash();
+  preloadNext();
+}
+function preloadNext() {
+  const nx = items[idx + 1], back = vbk();
+  if (!nx) return;
+  const key = pickQuality(nx);
+  if (key === "orig") return;  // don't spend bandwidth pre-loading full-size originals
+  const id = nx[key];
+  if (back.dataset.id === id) return;
+  back.src = srcFor(id); back.dataset.id = id; back.muted = true; back.preload = "auto"; back.load();
+  if (nx.start) back.addEventListener("loadedmetadata", () => { back.currentTime = nx.start; }, {once: true});
+}
+function updateInfo() {
+  const it = items[idx]; if (!it) return;
+  const v = va(), key = pickQuality(it);
+  const label = {light: "Light 540p", hd: "HD 1080p", orig: "Full original"}[key];
+  $("info").textContent = `${idx + 1} of ${items.length} · ${label}${v.videoWidth ? ` · ${v.videoWidth}×${v.videoHeight}` : ""}${isFinite(v.duration) ? " · " + fmt(v.duration) : ""}${key === "orig" && !it.light && !it.hd ? " · Light/HD copies come with Colab pass 3" : ""}`;
+}
+vids.forEach((v) => {
+  v.addEventListener("loadedmetadata", () => { if (v === va()) updateInfo(); });
+  v.addEventListener("waiting", () => { if (v === va()) $("buf").hidden = false; });
+  v.addEventListener("playing", () => { if (v === va()) { $("buf").hidden = true; $("playbtn").textContent = "❚❚"; watchEnd(v); } });
+  v.addEventListener("timeupdate", () => endShotIfDone(v));  // frame callbacks stop when the video isn't drawn (background tab)
+  v.addEventListener("canplay", () => { if (v === va()) $("buf").hidden = true; });
+  v.addEventListener("pause", () => { if (v === va()) $("playbtn").textContent = "▶"; });
+  v.addEventListener("ended", () => { if (v === va() && $("auto").checked && idx < items.length - 1) { idx++; load(false); } });
+  v.addEventListener("error", () => {
+    if (v !== va()) { v.removeAttribute("src"); v.dataset.id = ""; return; }
+    if (Date.now() > tokenExpires) return note("Your Google session ended. Sign in again to keep watching.", true, ["Sign in", signIn]);
+    if (useProxy) { useProxy = false; load(true); return; }
+    const it = items[idx];
+    if (pickQuality(it) === "orig" && (it.hd || it.light)) { quality = it.hd ? "hd" : "light"; note("The original wouldn't play in this browser, so a copy is playing instead."); load(true); return; }
+    note("This clip couldn't be played. Check you're signed in with the Google account that owns the Drive.", true);
+  });
+});
+function clipFor(it) { return it.clip || INDEX?.byDrive.get(it.orig); }
+function drawQueue() {
+  $("queue").innerHTML = `<span class="muted" style="font-size:12px;padding:2px 6px">Queue · ${items.length} clip${items.length === 1 ? "" : "s"}</span>` +
+    items.map((it, i) => `<button class="item" data-i="${i}" aria-current="${i === idx}"><div class="thumb"></div><span class="t">${esc(it.title)}</span></button>`).join("");
+  $("queue").querySelectorAll(".item").forEach((b) => { const c = clipFor(items[+b.dataset.i]); if (c) paintThumb(b.querySelector(".thumb"), c); });
+  $("queue").querySelector('[aria-current="true"]')?.scrollIntoView({block: "nearest"});
+}
+$("queue").addEventListener("click", (e) => { const b = e.target.closest(".item"); if (b) { idx = +b.dataset.i; load(false); } });
+const step = (d) => { const v = va(); v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + d)); };
+const setQ = (q) => { quality = q; store.set("gtp-q", q); vbk().dataset.id = ""; load(true); };
+$("q-light").onclick = () => setQ("light"); $("q-hd").onclick = () => setQ("hd"); $("q-full").onclick = () => setQ("full");
+$("prev").onclick = () => { if (idx > 0) { idx--; load(false); } };
+$("next").onclick = () => { if (idx < items.length - 1) { idx++; load(false); } };
+$("back").onclick = () => step(-5); $("fwd").onclick = () => step(5);
+$("playbtn").onclick = () => (va().paused ? va().play() : va().pause());
+$("speed").onchange = () => { va().playbackRate = +$("speed").value; };
+
+/* ================= MULTI-VIEW ================= */
+let tiles = [], mQuality = store.get("gtp-mq", "light");
+function openMulti(list) {
+  show("multi");
+  tiles.forEach((t) => { t.v.pause(); t.v.removeAttribute("src"); t.v.load(); });
+  const grid = $("mgrid"); grid.innerHTML = ""; grid.className = "mgrid" + (list.length === 1 ? " n1" : "");
+  tiles = list.slice(0, 4).map((it, i) => {
+    const el = document.createElement("div"); el.className = "tile" + (i === 0 ? " audio" : "");
+    el.innerHTML = `<video playsinline preload="auto"></video><div class="cap"><span>${i + 1} · ${esc(it.title)}</span><span class="snd">${i === 0 ? "♪ sound" : ""}</span></div>`;
+    grid.appendChild(el);
+    const v = el.querySelector("video"); v.muted = i !== 0;
+    el.onclick = () => setAudio(i);
+    el.ondblclick = () => openQueue(list.slice(), i);
+    return {it, el, v};
+  });
+  loadMulti(false);
+}
+function loadMulti(keep) {
+  $("m-light").setAttribute("aria-pressed", mQuality === "light"); $("m-hd").setAttribute("aria-pressed", mQuality === "hd");
+  tiles.forEach((t) => {
+    const key = mQuality === "hd" ? (t.it.hd ? "hd" : t.it.light ? "light" : "orig") : (t.it.light ? "light" : t.it.hd ? "hd" : "orig");
+    const at = keep ? t.v.currentTime : 0, playing = keep && !t.v.paused;
+    t.v.src = srcFor(t.it[key]);
+    t.v.addEventListener("loadedmetadata", () => { t.v.currentTime = at; if (playing) t.v.play().catch(() => {}); updateSeek(); }, {once: true});
+  });
+}
+function setAudio(i) {
+  tiles.forEach((t, k) => { t.v.muted = k !== i; t.el.classList.toggle("audio", k === i); t.el.querySelector(".snd").textContent = k === i ? "♪ sound" : ""; });
+}
+const longest = () => Math.max(0, ...tiles.map((t) => t.v.duration || 0));
+function updateSeek() { const L = longest(); const now = Math.max(0, ...tiles.map((t) => t.v.currentTime || 0)); $("m-seek").max = L || 100; $("m-seek").value = now; $("m-time").textContent = `${fmt(now)} / ${fmt(L)}`; }
+setInterval(() => { if (view === "multi" && tiles.length) updateSeek(); }, 500);
+$("m-play").onclick = () => {
+  const anyPlaying = tiles.some((t) => !t.v.paused);
+  tiles.forEach((t) => (anyPlaying ? t.v.pause() : t.v.play().catch(() => {})));
+  $("m-play").textContent = anyPlaying ? "▶ Play all" : "❚❚ Pause all";
+};
+$("m-restart").onclick = () => tiles.forEach((t) => { t.v.currentTime = 0; });
+$("m-seek").oninput = () => tiles.forEach((t) => { t.v.currentTime = Math.min(+$("m-seek").value, Math.max(0, (t.v.duration || 0) - 0.05)); });
+$("m-light").onclick = () => { mQuality = "light"; store.set("gtp-mq", "light"); loadMulti(true); };
+$("m-hd").onclick = () => { mQuality = "hd"; store.set("gtp-mq", "hd"); loadMulti(true); };
+
+/* ================= keyboard ================= */
+addEventListener("keydown", (e) => {
+  if (["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName) || e.metaKey || e.ctrlKey) return;
+  const k = e.key.toLowerCase();
+  if (view === "multi") { if (k === " " || k === "k") { e.preventDefault(); $("m-play").click(); } const n = +k; if (n >= 1 && n <= tiles.length) setAudio(n - 1); return; }
+  if (view !== "play") return;
+  const acts = {
+    " ": () => $("playbtn").click(), k: () => $("playbtn").click(), j: () => step(-5), l: () => step(5),
+    arrowleft: () => step(-1), arrowright: () => step(1), ",": () => { va().pause(); step(-1 / 30); }, ".": () => { va().pause(); step(1 / 30); },
+    "1": () => $("q-light").click(), "2": () => $("q-hd").click(), "3": () => $("q-full").click(), p: () => $("prev").click(), n: () => $("next").click(),
+    f: () => { const box = $("vbox"); document.fullscreenElement ? document.exitFullscreen() : (box.requestFullscreen?.() || va().webkitEnterFullscreen?.()); },
+  };
+  if (acts[k]) { e.preventDefault(); acts[k](); }
+});
+
+/* ================= start ================= */
+async function signedIn() {
+  $("who").textContent = TEST_API ? "Test mode" : "Signed in"; $("signin").hidden = true; $("welcome").hidden = true; note("");
+  proxyReady = proxyReady || registerProxy();
+  useProxy = await proxyReady;
+  const {list, i} = readHash();
+  if (list.length) { items = list; idx = Math.max(0, Math.min(i, items.length - 1)); show("play"); load(false); }
+  else show("lib");
+  loadIndex().then(() => { if (view === "lib") renderLib(); if (items.length) drawQueue(); });
+}
+addEventListener("hashchange", () => { const {list, i} = readHash(); if (list.length && token && list.map((x) => [x.orig, x.start, x.end].join()).join() !== items.map((x) => [x.orig, x.start, x.end].join()).join()) { items = list; idx = i; show("play"); load(false); } });
+loadToken();
+if (token) signedIn();
+else { $("welcome").hidden = false; $("signin").hidden = false; initGoogle(); }
+</script>
+<script src="player-embed.js"></script>
+</body>
+</html>
