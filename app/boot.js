@@ -48,11 +48,14 @@
   function keepToken(t, seconds) {
     token = t; expires = Date.now() + (seconds - 60) * 1000;
     for (const key of ["gta-token", "gtp-token"]) { try { sessionStorage.setItem(key, JSON.stringify({token, tokenExpires: expires})); } catch (e) {} }
+    try { localStorage.setItem("gta-token", JSON.stringify({token, tokenExpires: expires})); localStorage.setItem("gta-signed-in", "1"); } catch (e) {}
     sendWorkerConfig();
   }
   function loadSavedToken() {
     if (TEST) { keepToken(qs.get("token") || "test", 86400); return true; }
-    try { const s = JSON.parse(sessionStorage.getItem("gta-token") || "null"); if (s && s.tokenExpires > Date.now() + 60e3) { token = s.token; expires = s.tokenExpires; return true; } } catch (e) {}
+    for (const store of [sessionStorage, localStorage]) {
+      try { const s = JSON.parse(store.getItem("gta-token") || "null"); if (s && s.tokenExpires > Date.now() + 60e3) { token = s.token; expires = s.tokenExpires; return true; } } catch (e) {}
+    }
     return false;
   }
   function loadGoogle() {
@@ -332,10 +335,12 @@
     }
   }
   gateBtn.onclick = async () => {
-    try { await requestToken(token ? "" : "consent"); start(); }
+    try { await requestToken(token || wasSignedIn() ? "" : "consent"); start(); }
     catch (e) { gateSay("Sign-in didn't finish", e?.message || "Try again.", true); }
   };
   document.head.append(css);
   document.body.append(gate, bar, dialog);
+  function wasSignedIn() { try { return localStorage.getItem("gta-signed-in") === "1"; } catch (e) { return false; } }
   if (loadSavedToken()) start();
+  else if (wasSignedIn()) requestToken("none").then(() => start()).catch(() => {}); /* silent re-sign-in; if the browser blocks it, the button is one click with no consent screen */
 })();
