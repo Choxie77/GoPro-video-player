@@ -95,7 +95,34 @@
     });
     toggle.onclick = () => { remember(!on); setVideo(!on); };
     setVideo(wantVideo);
+    // lets a "▶ Play" link elsewhere on the page drive this player instead of opening the overlay
+    root.__inl = {fileId, play: (t) => {
+      if (!on) setVideo(true);
+      const go = () => { if (t > 0) video.currentTime = t; const p = video.play(); p?.catch?.(() => {}); };
+      if (video.readyState >= 1) go(); else video.addEventListener("loadedmetadata", go, {once: true});
+      root.scrollIntoView({block: "nearest", behavior: "smooth"});
+    }};
   };
+
+  // "▶ Play" links (clip detail, moments) used to open the overlay player. If this page has an inline player for the same
+  // clip, play there. Registered on window in the capture phase so it runs before boot.js's document-level handler.
+  window.addEventListener("click", (e) => {
+    const a = e.target.closest?.('a[target="gopro-player"]');
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    let h; try { h = new URLSearchParams(new URL(a.href, location.href).hash.slice(1)); } catch (x) { return; }
+    if (h.get("edit") === "1" || h.get("q") === "full") return;
+    const items = decodeURIComponent(h.get("list") || "").split("|").filter(Boolean);
+    if (items.length !== 1) return;
+    const f = items[0].split("~").map((x) => decodeURIComponent(x));
+    for (const root of document.querySelectorAll(".player")) {
+      if (root.__inl?.fileId && root.__inl.fileId === (f[1] || f[0]) || root.__inl?.fileId === f[4] || root.__inl?.fileId === f[0]) {
+        if (!root.offsetParent) continue;
+        e.preventDefault(); e.stopImmediatePropagation();
+        root.__inl.play(parseFloat(f[3]) || 0);
+        return;
+      }
+    }
+  }, true);
 
   // The Library draws the first Review player at the end of its own script, before this file loads: draw it again.
   // It can fail while the Library is still starting, so it retries for a few seconds.
