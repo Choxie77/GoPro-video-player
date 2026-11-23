@@ -610,6 +610,23 @@ dialog::backdrop { background: rgba(32,33,36,.55); }
 .fpanel select { width: 100%; }
 .fpanel .fchecks { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
 .fpanel #freset { justify-self: start; grid-column: 1 / -1; }
+.fpanel .tline { grid-column: 1 / -1; gap: 6px; }
+.fpanel .tline[hidden] { display: none; }
+.tline > span b { margin-left: 8px; color: var(--ink); font-weight: 700; }
+.tlbar { position: relative; height: 28px; }
+.tlbar::before { content: ""; position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 2px; background: var(--line); }
+.tlbar #tlfill { position: absolute; top: 12px; height: 4px; border-radius: 2px; background: var(--ink); }
+.tlbar input[type=range] { position: absolute; left: 0; top: 0; width: 100%; height: 28px; margin: 0; padding: 0; background: none; border: 0;
+  pointer-events: none; -webkit-appearance: none; appearance: none; }
+.tlbar input[type=range]::-webkit-slider-runnable-track { background: none; height: 28px; }
+.tlbar input[type=range]::-moz-range-track { background: none; height: 28px; }
+.tlbar input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto; width: 22px; height: 22px; margin-top: 3px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--ink); cursor: grab; }
+.tlbar input[type=range]::-moz-range-thumb { pointer-events: auto; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ink); cursor: grab; }
+.tlbar input[type=range]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tlticks { position: relative; height: 16px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.tlticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.tlticks span:first-child { transform: none; }
 @media (max-width: 560px) { .filters .count { display: none; } }
 
 /* sidebar: your work */
@@ -737,6 +754,9 @@ dialog::backdrop { background: rgba(32,33,36,.55); }
         <option value="long">Longest first</option>
         <option value="motion">Most action first</option>
       </select></label>
+      <div class="field tline" id="tl"><span>Timeline <b id="tllabel"></b></span>
+        <div class="tlbar"><i id="tlfill"></i><input type="range" id="tlmin" aria-label="From month"><input type="range" id="tlmax" aria-label="To month"></div>
+        <div class="tlticks" id="tlticks"></div></div>
       <div class="fchecks">
         <label class="toggle"><input type="checkbox" id="talk"> Talking</label>
         <label class="toggle"><input type="checkbox" id="hl"> Highlights</label>

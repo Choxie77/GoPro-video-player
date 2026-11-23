@@ -27,12 +27,12 @@
       `<button class="qchip" data-k="talk" aria-pressed="${el("talk").checked}">Talking</button>`,
       `<button class="qchip" data-k="hl" aria-pressed="${el("hl").checked}">Highlights</button>`,
       ...countries.map((v) => `<button class="qchip" data-k="country" data-v="${v.replace(/"/g, "&quot;")}" aria-pressed="${co === v}">${v.replace(/</g, "&lt;")}</button>`)].join("");
-    const n = (el("scene").value ? 1 : 0) + (el("sort").value !== "old" ? 1 : 0) + (el("hidejunk").checked ? 1 : 0) + (!["notreject", ...MARKS.map((m) => m[0])].includes(mk) ? 1 : 0);
+    const n = (el("scene").value ? 1 : 0) + (el("sort").value !== "old" ? 1 : 0) + (el("hidejunk").checked ? 1 : 0) + (window.tlActive?.() ? 1 : 0) + (!["notreject", ...MARKS.map((m) => m[0])].includes(mk) ? 1 : 0);
     el("fcount").hidden = !n; el("fcount").textContent = n;
   }
   function resetFilters() {
     el("mark").value = "notreject"; el("country").value = ""; el("scene").value = ""; el("sort").value = "old";
-    el("talk").checked = false; el("hl").checked = false; el("hidejunk").checked = false; fire("mark");
+    el("talk").checked = false; el("hl").checked = false; el("hidejunk").checked = false; window.tlReset?.(); fire("mark");
   }
   document.addEventListener("DOMContentLoaded", () => {
     if (!el("quick")) return;
@@ -47,6 +47,7 @@
     el("fbtn").addEventListener("click", () => { const open = el("fpanel").hidden; el("fpanel").hidden = !open; el("fbtn").setAttribute("aria-expanded", open); });
     el("freset").addEventListener("click", resetFilters);
     ["mark", "country", "scene", "sort", "talk", "hl", "hidejunk"].forEach((id) => el(id).addEventListener("change", drawChips));
+    ["tlmin", "tlmax"].forEach((id) => el(id).addEventListener("input", drawChips));
     drawChips();
   });
 

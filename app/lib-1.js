@@ -195,17 +195,49 @@ function header() {
   $("country").innerHTML = opts; $("rv-country").innerHTML = opts;
   const scenes = [...new Set(processed.flatMap((c) => c.scenes))].sort();
   $("scene").innerHTML = `<option value="">All scenes</option>` + scenes.map((c) => `<option>${esc(c)}</option>`).join("");
+  setupTimeline();
   $("waiting").textContent = waitingCount ? `${waitingCount.toLocaleString()} clips are still waiting for Colab. They appear after the next refresh.` : "";
 }
 $("journey").addEventListener("click", (e) => { const b = e.target.closest(".stop"); if (b) { $("q").value = b.dataset.q; renderLibrary(); } });
 
 const isJunk = (c) => c.flags.some((f) => f === "short" || f === "dark" || f === "pocket");
 const matchCountry = (c, co) => co === "?" ? !c.country : !co || c.country === co;
+/* Timeline: a two-handle slider over the months the clips cover (year + time of year in one control). */
+const TL_MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const tlIdx = (t) => +t.slice(0, 4) * 12 + (+t.slice(5, 7) - 1);
+const tlName = (i) => `${TL_MON[i % 12]} ${Math.floor(i / 12)}`;
+let TL = {lo: 0, hi: 0};
+function tlRange() { let a = +$("tlmin").value, b = +$("tlmax").value; if (a > b) [a, b] = [b, a]; return [a, b]; }
+function tlActive() { const [a, b] = tlRange(); return a > TL.lo || b < TL.hi; }
+function drawTimeline() {
+  const [a, b] = tlRange(), span = Math.max(1, TL.hi - TL.lo);
+  $("tllabel").textContent = a === TL.lo && b === TL.hi ? "All time" : a === b ? tlName(a) : `${tlName(a)} – ${tlName(b)}`;
+  $("tlfill").style.left = `${((a - TL.lo) / span) * 100}%`; $("tlfill").style.width = `${((b - a) / span) * 100}%`;
+}
+function setupTimeline() {
+  const idx = processed.filter((c) => c.t).map((c) => tlIdx(c.t));
+  if (!idx.length) { $("tl").hidden = true; return; }
+  const lo = idx.reduce((m, x) => Math.min(m, x)), hi = idx.reduce((m, x) => Math.max(m, x));
+  TL = {lo, hi}; $("tl").hidden = lo === hi;
+  for (const id of ["tlmin", "tlmax"]) { const r = $(id); r.min = lo; r.max = hi; r.step = 1; }
+  $("tlmin").value = lo; $("tlmax").value = hi;
+  const span = Math.max(1, hi - lo), ticks = [];
+  for (let y = Math.floor(lo / 12); y <= Math.floor(hi / 12); y++) {
+    const i = Math.max(lo, y * 12);
+    ticks.push(`<span style="left:${((i - lo) / span) * 100}%">${y === Math.floor(lo / 12) ? tlName(lo) : y}</span>`);
+  }
+  $("tlticks").innerHTML = ticks.join("");
+  drawTimeline();
+}
+window.tlReset = () => { if (!TL.hi) return; $("tlmin").value = TL.lo; $("tlmax").value = TL.hi; drawTimeline(); };
+["tlmin", "tlmax"].forEach((id) => $(id).addEventListener("input", () => { drawTimeline(); renderLibrary(); }));
 function filtered() {
   const q = $("q").value.trim().toLowerCase(), co = $("country").value, sc = $("scene").value, mk = $("mark").value;
+  const tlOn = tlActive(), [tlA, tlB] = tlRange();
   const talk = $("talk").checked, hide = $("hidejunk").checked, hl = $("hl").checked;
   let list = processed.filter((c) => {
     if (!matchCountry(c, co)) return false;
+    if (tlOn) { if (!c.t) return false; const m = tlIdx(c.t); if (m < tlA || m > tlB) return false; }
     if (sc && !c.scenes.includes(sc)) return false;
     if (talk && !(c.speech > 2)) return false;
     if (hl && !(c.hl >= 4 || markOf(c.id)?.r === "best")) return false;
