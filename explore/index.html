@@ -54,6 +54,18 @@ main{max-width:1240px;margin:0 auto;padding:16px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
 .seg button{background:var(--panel);border:0;padding:5px 12px;cursor:pointer;font-size:13px}
 .seg button[aria-pressed=true]{background:var(--accent);color:#fff}
+.flag{font-size:1.15em;margin-right:5px;vertical-align:-1px}
+#cbar .chip{font-size:14px;padding:5px 13px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:10px 0}
+.cal .h{text-align:center;color:var(--mute);font-size:12px}
+.cal .d{position:relative;aspect-ratio:1/1;border-radius:8px;border:1px solid var(--line);background:var(--bg);padding:3px 5px;font-size:13px;text-align:left;cursor:pointer;overflow:hidden}
+.cal .d.off{opacity:.35;cursor:default}
+.cal .d.on{background:color-mix(in srgb,var(--accent) calc(var(--i)*100%),var(--panel));color:var(--ink)}
+.cal .d.in{outline:2px solid var(--ink);outline-offset:-2px}
+.cal .d .s{position:absolute;right:4px;bottom:2px;font-size:11px;color:var(--accent)}
+.cal .d small{position:absolute;left:5px;bottom:2px;font-size:10px;color:var(--mute)}
+.calhead{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.calhead select{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 .dayh{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;margin:14px 0 0;padding-bottom:4px;border-bottom:1px solid var(--line);cursor:pointer}
 .dayh b{font-size:16px}.dayh span{color:var(--mute);font-size:13px}
@@ -119,8 +131,9 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-
 
   <div class="bar"><div class="l"><div id="count" style="font-weight:600"></div><button class="btn pri" id="watch" type="button" hidden></button></div>
     <div class="r"><span class="seg" role="group" aria-label="Layout"><button type="button" id="vg" aria-pressed="true">Grid</button><button type="button" id="vd" aria-pressed="false">Day by day</button></span>
-      <button class="chip" id="fp" aria-pressed="false" type="button">Adam's picks</button><button class="chip" id="fh" aria-pressed="false" type="button">My hearts</button>
+      <button class="chip" id="calb" aria-pressed="false" type="button">📅 Dates</button><button class="chip" id="fp" aria-pressed="false" type="button">Adam's picks</button><button class="chip" id="fh" aria-pressed="false" type="button">My hearts</button>
       <label style="font-size:13px;color:var(--mute)">Sort <select id="sort"><option value="best">Best match</option><option value="new">Newest first</option><option value="old">Oldest first</option><option value="long">Longest first</option></select></label></div></div>
+  <div class="hints" id="cbar" style="margin:0 0 12px" aria-label="Filter by country"></div>
   <div class="grid" id="grid"></div>
   <p class="empty" id="more" hidden><button class="btn" id="moreb">Show more</button></p>
 </main>
@@ -128,6 +141,10 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-
 <dialog id="picks"><h3>My picks</h3><p style="margin:0;color:var(--mute);font-size:13px">Hearted clips. Tick "more" for things you'd like to see more of.</p>
   <ul id="plist"></ul><textarea id="pmsg" placeholder="Add a message (optional)"></textarea>
   <div class="acts"><button class="btn" id="pcopy" type="button">Copy list</button><button class="btn pri" id="psend" type="button" hidden>Send to Adam</button><button class="btn" id="pclose" type="button">Close</button></div></dialog>
+<dialog id="cald"><div class="calhead"><button class="btn" id="calprev" type="button" aria-label="Previous month">‹</button><select id="calsel" aria-label="Jump to a month"></select><button class="btn" id="calnext" type="button" aria-label="Next month">›</button></div>
+  <div class="cal" id="calg"></div>
+  <p style="margin:0;color:var(--mute);font-size:12px">Brighter days have more footage, ★ marks Adam's picks. Click a day, then another to pick a range.</p>
+  <div class="acts"><span id="calinfo" style="flex:1;align-self:center;font-size:13px"></span><button class="btn" id="calclear" type="button">Clear dates</button><button class="btn pri" id="caldone" type="button">Done</button></div></dialog>
 <dialog id="statd"><h3>Trip stats</h3><canvas id="statc" width="1080" height="1350"></canvas>
   <div class="acts"><button class="btn" id="statsave" type="button">Save as image</button><button class="btn" id="statclose" type="button">Close</button></div></dialog>
 
@@ -318,12 +335,49 @@ function render(){
 function facets(){
   const r=run("country").res.map(x=>x[1]),cnt={};r.forEach(c=>cnt[c.country]=(cnt[c.country]||0)+1);
   const list=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
-  $("countries").innerHTML=list.map(([k,n])=>`<button class="chip" data-c="${esc(k)}" aria-pressed="${S.country===k}">${esc(k)}<small>${n}</small></button>`).join("");
+  const chip=([k,n])=>`<button class="chip" data-c="${esc(k)}" aria-pressed="${S.country===k}"><span class="flag" aria-hidden="true">${flag(k)}</span>${esc(k)}<small>${n}</small></button>`;
+  $("countries").innerHTML=list.map(chip).join("");
+  $("cbar").innerHTML=`<button class="chip" data-c="" aria-pressed="${!S.country}"><span class="flag" aria-hidden="true">🌍</span>All countries<small>${r.length}</small></button>`+list.map(chip).join("");
+  const cb=$("calb");cb.setAttribute("aria-pressed",!!S.range);cb.textContent=S.range?"📅 "+(S.range[0]===S.range[1]?fmtDate(S.range[0]):fmtDate(S.range[0]).replace(/ \d{4}$/,"")+" to "+fmtDate(S.range[1])):"📅 Dates";
   const days=new Set(CL.map(c=>c.o.date)).size,secs=CL.reduce((s,c)=>s+c.dur,0);
   $("stats").innerHTML=`<div><b>${(window.COUNTRIES||[]).length}</b><span>countries</span></div><div><b>${CH.length}</b><span>stops</span></div><div><b>${days}</b><span>days filmed</span></div><div><b>${Math.round(secs/3600)}</b><span>hours</span></div>`;
 }
-$("countries").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;S.country=S.country===b.dataset.c?"":b.dataset.c;S.shown=60;
+const pickCountry=e=>{const b=e.target.closest(".chip");if(!b)return;S.country=S.country===b.dataset.c?"":b.dataset.c;S.shown=60;
   if(S.country){const c=CH.find(x=>x.country===S.country);if(c)flyTo(c.lon,c.lat)}render()};
+$("countries").onclick=pickCountry;$("cbar").onclick=pickCountry;
+/* flag emoji from the two-letter country code in the data; the globe emoji for clips with no country */
+const CC={};
+const flag=name=>{const cc=CC[name];return cc&&/^[A-Za-z]{2}$/.test(cc)?String.fromCodePoint(...[...cc.toUpperCase()].map(ch=>127397+ch.charCodeAt(0))):"🌍"};
+
+/* ---------- calendar: pick the days that were good ---------- */
+let calMonth="",calFirst=null,DAYINFO=new Map();
+function buildDayInfo(){
+  DAYINFO=new Map();for(const c of CL){const d=DAYINFO.get(c.o.date)||{secs:0,n:0,pick:0};d.secs+=c.dur;d.n++;if(c.pick>=2)d.pick++;DAYINFO.set(c.o.date,d)}
+}
+function calMonths(){const s=new Set([...DAYINFO.keys()].map(d=>d.slice(0,7)));return [...s].sort()}
+function renderCal(){
+  const ms=calMonths();if(!calMonth)calMonth=ms[0];
+  $("calsel").innerHTML=ms.map(m=>`<option value="${m}" ${m===calMonth?"selected":""}>${new Date(m+"-15T12:00").toLocaleDateString("en-GB",{month:"long",year:"numeric"})}</option>`).join("");
+  const [y,mo]=calMonth.split("-").map(Number),first=new Date(y,mo-1,1),offset=(first.getDay()+6)%7,len=new Date(y,mo,0).getDate();
+  const max=Math.max(...[...DAYINFO.values()].map(d=>d.secs));
+  let h=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(x=>`<div class="h">${x}</div>`).join("")+"<div></div>".repeat(offset);
+  for(let d=1;d<=len;d++){
+    const key=`${calMonth}-${String(d).padStart(2,"0")}`,i=DAYINFO.get(key),inr=S.range&&key>=S.range[0]&&key<=S.range[1];
+    h+=i?`<button type="button" class="d on${inr?" in":""}" data-d="${key}" style="--i:${Math.min(.85,.12+i.secs/max*1.4).toFixed(2)}" title="${i.n} clips, ${Math.round(i.secs/60)} min">${d}<small>${i.n}</small>${i.pick?'<span class="s">★</span>':""}</button>`:`<div class="d off">${d}</div>`;
+  }
+  $("calg").innerHTML=h;
+  const idx=ms.indexOf(calMonth);$("calprev").disabled=idx<=0;$("calnext").disabled=idx>=ms.length-1;
+  $("calinfo").textContent=S.range?(S.range[0]===S.range[1]?fmtDate(S.range[0]):fmtDate(S.range[0])+" to "+fmtDate(S.range[1]))+` · ${RES.length} clips`:"All dates";
+}
+$("calb").onclick=()=>{calFirst=null;calMonth=S.range?S.range[0].slice(0,7):"";renderCal();$("cald").showModal()};
+$("calprev").onclick=()=>{const ms=calMonths(),i=ms.indexOf(calMonth);if(i>0){calMonth=ms[i-1];renderCal()}};
+$("calnext").onclick=()=>{const ms=calMonths(),i=ms.indexOf(calMonth);if(i<ms.length-1){calMonth=ms[i+1];renderCal()}};
+$("calsel").onchange=e=>{calMonth=e.target.value;renderCal()};
+$("calg").onclick=e=>{const b=e.target.closest("[data-d]");if(!b)return;const d=b.dataset.d;
+  if(!calFirst){calFirst=d;S.range=[d,d]}else{S.range=calFirst<d?[calFirst,d]:[d,calFirst];calFirst=null}
+  S.shown=60;render();renderCal()};
+$("calclear").onclick=()=>{S.range=null;calFirst=null;S.shown=60;render();renderCal()};
+$("caldone").onclick=()=>$("cald").close();
 $("moreb").onclick=()=>{S.shown+=60;render()};
 $("sort").onchange=e=>{S.sort=e.target.value;S.shown=60;render()};
 $("vg").onclick=()=>{S.view="grid";render()};$("vd").onclick=()=>{S.view="days";S.shown=Math.max(S.shown,80);render()};
@@ -448,7 +502,8 @@ $("hints").onclick=e=>{const b=e.target.closest("[data-q]");if(!b)return;S.q=b.d
 const dc=$("dc");let DAYS=[];
 function buildDays(){
   const m=new Map();CL.forEach(c=>{const d=m.get(c.o.date)||{date:c.o.date,secs:0,country:c.country};d.secs+=c.dur;m.set(c.o.date,d)});
-  DAYS=[...m.values()].sort((a,b)=>a.date<b.date?-1:1);
+  DAYS=[...m.values()].sort((a,b)=>a.date<b.date?-1:1);buildDayInfo();
+  for(const c of CL)if(c.cc&&!CC[c.country])CC[c.country]=c.cc;
   $("d0").textContent=DAYS.length?fmtDate(DAYS[0].date):"";$("d1").textContent=DAYS.length?fmtDate(DAYS.at(-1).date):"";
 }
 function drawStrip(){
