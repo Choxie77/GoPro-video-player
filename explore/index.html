@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0e0e0c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>Explore the Journey</title>
+<style>
+:root{--bg:#f4f2ec;--panel:#fff;--ink:#1c1a16;--mute:#6f6a5f;--line:#e3dfd3;--accent:#d2561f;--sea:#e8edf0;--land:#cfc9b8;--visit:#e7a27a}
+@media (prefers-color-scheme:dark){:root{--bg:#0e0e0c;--panel:#18170f;--ink:#f1eee6;--mute:#a29d90;--line:#2c2a22;--accent:#ff8a4f;--sea:#12151a;--land:#2b2a22;--visit:#6d4a33}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header b{font-size:16px}header .sp{flex:1}
+.btn{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 14px;cursor:pointer}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:focus-visible,input:focus-visible,select:focus-visible,.card:focus-visible,.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#welcome{max-width:560px;margin:12vh auto;padding:0 20px;text-align:center}
+#welcome h1{font-size:34px;line-height:1.1;margin:0 0 10px}#welcome p{color:var(--mute)}
+main{max-width:1240px;margin:0 auto;padding:16px}
+.hello{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:10px 14px;margin:0 0 12px}
+.search{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 8px 6px 16px}
+.search input{flex:1;border:0;background:none;font-size:18px;padding:10px 0;outline:none;min-width:0}
+.hints{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0;align-items:center;color:var(--mute);font-size:13px}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px 12px;cursor:pointer;font-size:13px}
+.chip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip small{color:var(--mute);margin-left:4px}.chip[aria-pressed=true] small{color:#ffe}
+.viz{display:grid;grid-template-columns:minmax(300px,520px) 1fr;gap:16px;margin:16px 0}
+@media(max-width:820px){.viz{grid-template-columns:1fr}}
+.globe{position:relative;background:var(--sea);border:1px solid var(--line);border-radius:16px;aspect-ratio:1/1;overflow:hidden;touch-action:none}
+.globe canvas{width:100%;height:100%;display:block;cursor:grab}
+.globe .tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;white-space:nowrap;transform:translate(-50%,-130%)}
+.globe .now{position:absolute;left:12px;bottom:10px;right:12px;display:flex;gap:10px;align-items:center;font-size:13px}
+.globe .mode{position:absolute;top:10px;left:10px;display:flex;gap:4px}
+.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card2{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}
+.stats b{display:block;font-size:22px;line-height:1.15}.stats span{color:var(--mute);font-size:12px}
+.strip canvas{width:100%;height:92px;display:block;cursor:crosshair;touch-action:none}
+.strip .cap{display:flex;justify-content:space-between;color:var(--mute);font-size:12px;margin-top:4px;gap:8px}
+.tour{margin:0 0 16px}
+.tour h2{font-size:18px;margin:0 0 2px}.tour p{margin:0 0 10px;color:var(--mute);font-size:13px}
+.row{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity}
+.row .card{flex:0 0 190px;scroll-snap-align:start}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:8px 0 10px;flex-wrap:wrap}
+.bar .l,.bar .r{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.bar select{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{background:var(--panel);border:0;padding:5px 12px;cursor:pointer;font-size:13px}
+.seg button[aria-pressed=true]{background:var(--accent);color:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.dayh{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;margin:14px 0 0;padding-bottom:4px;border-bottom:1px solid var(--line);cursor:pointer}
+.dayh b{font-size:16px}.dayh span{color:var(--mute);font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;text-align:left}
+.card .th{aspect-ratio:16/9;background:var(--line) center/cover no-repeat;position:relative}
+.card .du{position:absolute;right:6px;bottom:6px;background:#000b;color:#fff;border-radius:6px;padding:1px 7px;font-size:12px}
+.card .star{position:absolute;left:6px;top:6px;background:var(--accent);color:#fff;border-radius:6px;padding:0 7px;font-size:11px}
+.card .ic{position:absolute;right:6px;top:6px;display:flex;gap:4px}
+.card .ic button{background:#000a;border:0;color:#fff;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1}
+.card .ic button.on{background:var(--accent)}
+.card .tx{padding:8px 10px 10px;font-size:13px}.card .tx b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.card .tx span{color:var(--mute)}
+.card .snip{display:block;margin-top:4px;font-style:normal;color:var(--ink);font-size:12.5px;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.card .snip mark{background:#ffd60a55;color:inherit;border-radius:3px}
+.empty{padding:40px 10px;text-align:center;color:var(--mute)}
+.note{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;padding:8px 12px;margin:10px 0;font-size:14px}
+dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:16px;max-width:min(560px,94vw);width:100%;padding:18px}
+dialog::backdrop{background:#0008}
+dialog h3{margin:0 0 8px}
+#plist{max-height:34vh;overflow:auto;margin:8px 0;padding:0;list-style:none;font-size:13px}
+#plist li{display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line)}
+#plist li span{flex:1}
+dialog textarea{width:100%;min-height:70px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
+dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap}
+#statc{width:100%;height:auto;border-radius:10px;display:block}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:10px;font-size:14px;z-index:9}
+</style>
+</head>
+<body>
+<header><b>Explore the Journey</b><span class="sp"></span>
+  <button class="btn" id="statb" hidden>Trip stats</button><button class="btn" id="pickb" hidden>My picks <span id="pickn"></span></button>
+  <span id="who" style="color:var(--mute);font-size:13px"></span><button class="btn" id="signin" hidden>Sign in with Google</button></header>
+
+<section id="welcome" hidden>
+  <h1>A year of travel, searchable</h1>
+  <p>Search every clip by place, date, time of day and what was said, watch the route unfold on the globe, then play any moment. This is invite-only: sign in with the Google account the folder was shared with.</p>
+  <p><button class="btn pri" id="signin2">Sign in with Google</button></p>
+  <p style="font-size:13px">Read-only. Nothing is stored or changed in your Drive.</p>
+</section>
+
+<main id="app" hidden>
+  <div class="hello" id="hello" hidden></div>
+  <form class="search" id="sform" role="search">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
+    <input id="q" type="search" autocomplete="off" aria-label="Search all clips" placeholder="Try: Bangkok january, night, long clips in Vietnam, day 100">
+    <button class="btn" type="button" id="clear">Clear</button>
+  </form>
+  <div class="hints" id="hints"></div>
+  <div id="notes"></div>
+
+  <div class="viz">
+    <div class="globe" id="globe"><canvas id="gc" aria-label="Globe or map showing the route"></canvas><div class="tip" id="tip" hidden></div>
+      <div class="mode seg"><button type="button" id="mg" aria-pressed="true">Globe</button><button type="button" id="mm" aria-pressed="false">Map</button></div>
+      <div class="now"><button class="btn pri" id="play" type="button">Play the journey</button><span id="nowtxt" style="color:var(--ink)"></span></div></div>
+    <div class="side">
+      <div class="card2"><div class="stats" id="stats"></div></div>
+      <div class="card2 strip"><canvas id="dc" aria-label="Footage per day. Drag to choose dates."></canvas>
+        <div class="cap"><span id="d0"></span><span id="drange" style="color:var(--ink)"></span><span id="d1"></span></div></div>
+      <div class="card2"><div style="font-size:13px;color:var(--mute);margin-bottom:6px">Countries</div><div class="hints" style="margin:0" id="countries"></div></div>
+    </div>
+  </div>
+
+  <section class="tour card2" id="tour" hidden></section>
+
+  <div class="bar"><div class="l"><div id="count" style="font-weight:600"></div><button class="btn pri" id="watch" type="button" hidden></button></div>
+    <div class="r"><span class="seg" role="group" aria-label="Layout"><button type="button" id="vg" aria-pressed="true">Grid</button><button type="button" id="vd" aria-pressed="false">Day by day</button></span>
+      <button class="chip" id="fp" aria-pressed="false" type="button">Adam's picks</button><button class="chip" id="fh" aria-pressed="false" type="button">My hearts</button>
+      <label style="font-size:13px;color:var(--mute)">Sort <select id="sort"><option value="best">Best match</option><option value="new">Newest first</option><option value="old">Oldest first</option><option value="long">Longest first</option></select></label></div></div>
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="more" hidden><button class="btn" id="moreb">Show more</button></p>
+</main>
+
+<dialog id="picks"><h3>My picks</h3><p style="margin:0;color:var(--mute);font-size:13px">Hearted clips. Tick "more" for things you'd like to see more of.</p>
+  <ul id="plist"></ul><textarea id="pmsg" placeholder="Add a message (optional)"></textarea>
+  <div class="acts"><button class="btn" id="pcopy" type="button">Copy list</button><button class="btn pri" id="psend" type="button" hidden>Send to Adam</button><button class="btn" id="pclose" type="button">Close</button></div></dialog>
+<dialog id="statd"><h3>Trip stats</h3><canvas id="statc" width="1080" height="1350"></canvas>
+  <div class="acts"><button class="btn" id="statsave" type="button">Save as image</button><button class="btn" id="statclose" type="button">Close</button></div></dialog>
+
+<script>
+/* Public by design: identifies this app to Google's sign-in (same as the player). */
+const CLIENT_ID="231539038852-tnr10gin3klaserl2h90qkrdeq1odskf.apps.googleusercontent.com";
+const SCOPE="https://www.googleapis.com/auth/drive.readonly";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const qs=new URLSearchParams(location.search), TEST_API=qs.get("api");
+const API=TEST_API||"https://www.googleapis.com/drive/v3/files/";
+const MONTHS=["january","february","march","april","may","june","july","august","september","october","november","december"];
+const store={get:(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let token=null,tokenExpires=0,tokenClient=null,INDEX=null,CL=[],CH=[],SPR=new Map(),sprUrls=new Map();
+const S={q:"",country:"",place:"",range:null,sort:"best",shown:60,view:"grid",picks:false,hearts:false,cell:""};
+let HEART=store.get("gtx-hearts",{});   // {clipId:{m:0|1}} saved in this browser only
+
+/* ---------- sign-in (same token slot as the player, so you stay signed in when you open a clip) ---------- */
+function saveToken(){try{sessionStorage.setItem("gtp-token",JSON.stringify({token,tokenExpires}))}catch(e){}}
+function loadToken(){
+  if(TEST_API){token=qs.get("token")||"test";tokenExpires=Date.now()+864e5;return}
+  try{const s=JSON.parse(sessionStorage.getItem("gtp-token")||"null");if(s&&s.tokenExpires>Date.now()+6e4)({token,tokenExpires}=s)}catch(e){}
+}
+function initGoogle(){
+  if(TEST_API||tokenClient)return true;
+  if(!window.google?.accounts?.oauth2)return false;
+  tokenClient=google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID,scope:SCOPE,callback:r=>{
+    if(r.error)return;token=r.access_token;tokenExpires=Date.now()+(r.expires_in-60)*1000;saveToken();start();
+  }});return true;
+}
+function signIn(){if(!initGoogle())return setTimeout(signIn,300);tokenClient.requestAccessToken({prompt:""})}
+$("signin").onclick=$("signin2").onclick=signIn;
+async function api(path,params={},blob){
+  const base=path?API+path:API.replace(/\/$/,"");
+  const r=await fetch(base+"?"+new URLSearchParams({supportsAllDrives:"true",...params}),{headers:{Authorization:`Bearer ${token}`}});
+  if(r.status===401){sessionStorage.removeItem("gtp-token");token=null;$("app").hidden=true;$("welcome").hidden=false;$("signin").hidden=false;throw new Error("401")}
+  if(!r.ok)throw new Error(r.status);return blob?r.blob():r.json();
+}
+function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),2200)}
+
+/* ---------- data ---------- */
+const LABEL={"Khlong Toei":"Bangkok","Bang Kapi":"Bangkok","Quan Bon":"Ho Chi Minh City","Son Tra":"Da Nang","Ngu Hanh Son":"Da Nang","Hoan Kiem":"Hanoi","Tay Ho":"Hanoi","Nai Harn":"Phuket","Ko Pha-Ngan":"Ko Pha Ngan","Nakanojomachi":"Nakanojo"};
+const REGION_LABEL={"Ha Noi":"Hanoi","Chongqing Shi":"Chongqing"};
+const COUNTRY_NAME={"Viet Nam":"Vietnam"};
+const PALETTE=["#e8743b","#3aa6b9","#c9a227","#7a6bd0","#4fa36b","#d0517a","#8a8f98"];
+const norm=s=>String(s||"").toLowerCase().replace(/[\s\-]+/g," ").trim();
+const fmtDate=iso=>new Date(iso.slice(0,10)+"T12:00").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+const fmtDay=iso=>new Date(iso.slice(0,10)+"T12:00").toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
+const fmtDur=s=>{const m=Math.floor(s/60);return m+":"+String(Math.floor(s%60)).padStart(2,"0")};
+let METRO=new Set();
+function placeLabel(city,region){
+  if(LABEL[city])return LABEL[city];
+  if(region&&METRO.has(region))return REGION_LABEL[region]||region;   // a big city's districts all read as the city
+  return city||region||"Unknown place";
+}
+async function loadIndex(){
+  let f=null;
+  for(const name of ["explore_index.json","player_index.json"]){
+    const found=await api("",{q:`name='${name}' and trashed=false`,fields:"files(id,parents,modifiedTime)",orderBy:"modifiedTime desc",pageSize:"5"});
+    if(found.files?.[0]){f=found.files[0];break}
+  }
+  if(!f)throw new Error("The library index was not found. Ask Adam to share the folder with you.");
+  INDEX=await api(f.id,{alt:"media"});
+  const parent=f.parents?.[0];
+  if(parent){const l=await api("",{q:`'${parent}' in parents and name contains 'gtl-sprite-' and trashed=false`,fields:"files(id,name)",pageSize:"1000"});for(const s of l.files||[])SPR.set(s.name,s.id)}
+  prep();
+}
+function prep(){
+  const per=new Map();for(const c of INDEX.clips){if(c.region&&c.city){if(!per.has(c.region))per.set(c.region,new Set());per.get(c.region).add(norm(c.city))}}
+  METRO=new Set(["Bangkok","Ho Chi Minh City","Da Nang","Ha Noi","Tokyo","Chongqing Shi"].filter(r=>per.has(r)));
+  CL=INDEX.clips.filter(c=>!c.pre).map(c=>{
+    c.country=c.country||"Unplaced";
+    const h=Number(c.t.slice(11,13)),date=c.t.slice(0,10),mo=Number(date.slice(5,7))-1;
+    const label=placeLabel(c.city,c.region);
+    const tod=h>=22||h<5?"night":h<11?"morning":h<17?"afternoon":"evening";
+    const w=Number(String(c.res||"").split("x")[0])||0;
+    const extra=[c.title,c.desc,(c.tags||[]).join(" "),(c.scenes||[]).join(" ")].filter(Boolean).join(" ");
+    const sx=(c.sx||[]).map(s=>({a:s[0],t:s[1],n:norm(s[1])}));
+    c.o={label,date,h,tod,mo,year:date.slice(0,4),sx,tx:sx.map(s=>s.n).join(" "),
+      hay:norm([label,c.city,c.region,c.country,COUNTRY_NAME[c.country]||"",c.cc,MONTHS[mo],MONTHS[mo].slice(0,3),date.slice(0,4),date,"day "+c.day,tod,h>=5&&h<8?"sunrise":"",h>=17&&h<20?"sunset":"",w>=5000?"5k 4k":w>=3800?"4k":"",extra].join(" ")),
+      lab:norm([label,c.city,c.region,c.country].join(" ")),cell:c.lat==null?"":`${c.lat},${c.lon}`};
+    return c;
+  }).sort((a,b)=>a.t<b.t?-1:1);
+  INDEX.byId=new Map(CL.map(c=>[c.id,c]));
+  // chapters: consecutive stops in the same place, with a position from the clips recorded there
+  const byLabel=(l,a,b)=>CL.filter(c=>c.o.label===l&&c.o.date>=a&&c.o.date<=b&&c.lat!=null);
+  const raw=(INDEX.stops||[]).filter(s=>!s.before_trip).map(s=>({label:placeLabel(s.city,s.area),country:s.country,cc:s.cc,a:s.start.slice(0,10),b:s.end.slice(0,10),secs:s.seconds,n:s.clips}));
+  CH=[];for(const s of raw){const p=CH[CH.length-1];if(p&&p.label===s.label&&p.cc===s.cc){p.b=s.b;p.secs+=s.secs;p.n+=s.n}else CH.push({...s})}
+  for(const c of CH){const cs=byLabel(c.label,c.a,c.b);const med=k=>{const v=cs.map(x=>x[k]).sort((x,y)=>x-y);return v[v.length>>1]};c.lat=cs.length?med("lat"):null;c.lon=cs.length?med("lon"):null}
+  CH=CH.filter(c=>c.lat!=null);
+  const cs=[...new Set(CH.map(c=>c.country))];CH.forEach(c=>c.col=PALETTE[cs.indexOf(c.country)%PALETTE.length]);
+  window.COUNTRIES=cs;
+}
+
+/* ---------- search ---------- */
+function parse(q){
+  const t=norm(q).match(/[a-z0-9']+(?:-\d+)*/g)||[],f=[];
+  for(let i=0;i<t.length;i++){
+    const w=t[i];
+    if(w==="day"&&/^\d+$/.test(t[i+1]||"")){f.push({k:"day",v:+t[++i]});continue}
+    if(/^d\d+$/.test(w)){f.push({k:"day",v:+w.slice(1)});continue}
+    if(w==="short"){f.push({k:"dur",max:20});continue}
+    if(w==="long"||w==="longer"){f.push({k:"dur",min:60});continue}
+    if(w==="golden"){if(t[i+1]==="hour")i++;f.push({k:"hrs",set:[5,6,7,17,18]});continue}
+    if(/^(the|a|an|in|at|of|on|clips?|videos?|from|with|and|me|my)$/.test(w))continue;
+    f.push({k:"txt",v:w});
+  }return f;
+}
+function vocab(){if(!vocab.v){const s=new Set();CL.forEach(c=>(c.o.hay+" "+c.o.tx).split(" ").forEach(x=>x.length>3&&s.add(x)));vocab.v=[...s]}return vocab.v}
+function lev(a,b){const d=[];for(let i=0;i<=a.length;i++){d[i]=[i];}for(let j=1;j<=b.length;j++)d[0][j]=j;
+  for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length]}
+function run(ignore){
+  let f=parse(S.q);const notes=[];
+  f=f.map(x=>{if(x.k!=="txt"||x.v.length<4||/^\d/.test(x.v))return x;
+    if(CL.some(c=>c.o.hay.includes(x.v)||c.o.tx.includes(x.v)))return x;
+    let best=null;for(const w of vocab()){const d=lev(x.v,w);if(d<=2&&(!best||d<best[0]))best=[d,w]}
+    if(best){notes.push(`No match for "${x.v}", showing "${best[1]}".`);return{k:"txt",v:best[1]}}return x});
+  const res=[];
+  for(const c of CL){
+    if(ignore!=="range"&&S.range&&(c.o.date<S.range[0]||c.o.date>S.range[1]))continue;
+    if(ignore!=="place"&&S.place&&c.o.label!==S.place)continue;
+    if(ignore!=="country"&&S.country&&c.country!==S.country)continue;
+    if(S.cell&&c.o.cell!==S.cell)continue;
+    if(S.picks&&c.pick<2)continue;
+    if(S.hearts&&!HEART[c.id])continue;
+    let ok=true,sc=0;
+    for(const x of f){
+      if(x.k==="day"){if(c.day!==x.v){ok=false;break}sc+=2}
+      else if(x.k==="dur"){if((x.max&&c.dur>=x.max)||(x.min&&c.dur<x.min)){ok=false;break}}
+      else if(x.k==="hrs"){if(!x.set.includes(c.o.h)){ok=false;break}}
+      else if(c.o.hay.includes(x.v))sc+=c.o.lab.includes(x.v)?3:1;
+      else if(c.o.tx.includes(x.v))sc+=2;
+      else{ok=false;break}
+    }
+    if(ok)res.push([sc+(c.hl||0)*2+c.pick*2,c]);
+  }
+  return{res,notes,f};
+}
+function snippet(c,f){
+  const toks=f.filter(x=>x.k==="txt").map(x=>x.v);if(!toks.length||!c.o.sx.length)return null;
+  const line=c.o.sx.find(s=>toks.every(t=>s.n.includes(t)))||c.o.sx.find(s=>toks.some(t=>s.n.includes(t)));
+  if(!line)return null;
+  let html=esc(line.t);for(const t of toks){html=html.replace(new RegExp("("+t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")","ig"),"<mark>$1</mark>")}
+  return{a:line.a,html};
+}
+
+/* ---------- results ---------- */
+let RES=[],LASTF=[];
+function sortRes(r){
+  const k=S.view==="days"?"old":S.sort;
+  if(k==="new")r.sort((a,b)=>a[1].t<b[1].t?1:-1);else if(k==="old")r.sort((a,b)=>a[1].t<b[1].t?-1:1);
+  else if(k==="long")r.sort((a,b)=>b[1].dur-a[1].dur);else r.sort((a,b)=>b[0]-a[0]||(a[1].t<b[1].t?1:-1));
+  return r;
+}
+const hasFilter=()=>S.q||S.country||S.place||S.range||S.cell||S.picks||S.hearts;
+function cardHTML(c,i,f){
+  const sn=f?snippet(c,f):null;c._sn=sn;
+  const hh=HEART[c.id];
+  return `<div class="card" role="button" tabindex="0" data-i="${i}" data-id="${c.id}"><div class="th" data-id="${c.id}"><span class="du">${fmtDur(c.dur)}</span>${c.pick>=2?'<span class="star">★ Adam\'s pick</span>':""}<span class="ic"><button type="button" data-act="heart" class="${hh?"on":""}" aria-label="${hh?"Remove heart":"Heart this clip"}" title="Heart">${hh?"♥":"♡"}</button><button type="button" data-act="share" aria-label="Copy a link to this clip" title="Copy link">⤴</button></span></div><div class="tx"><b>${esc(c.o.label)}</b><span>${fmtDate(c.t)} · ${c.t.slice(11,16)} · Day ${c.day??"–"}</span>${sn?`<em class="snip">“${sn.html}” <small>${fmtDur(sn.a)}</small></em>`:""}</div></div>`;
+}
+function render(){
+  const out=run();LASTF=out.f;RES=sortRes(out.res).map(x=>x[1]);
+  $("notes").innerHTML=out.notes.map(n=>`<div class="note">${esc(n)}</div>`).join("");
+  const hrs=RES.reduce((s,c)=>s+c.dur,0)/3600;
+  $("count").textContent=RES.length?`${RES.length.toLocaleString()} clip${RES.length===1?"":"s"} · ${hrs.toFixed(hrs<10?1:0)} h`:"No clips match";
+  const w=$("watch");w.hidden=!RES.length;w.textContent=`▶ Watch ${S.place?""+S.place:hasFilter()?"these":"everything"}`.trim()+" (best first)";
+  const g=$("grid");
+  const show=RES.slice(0,S.shown);
+  if(S.view==="days"){
+    let html="",cur="";
+    show.forEach((c,i)=>{
+      if(c.o.date!==cur){cur=c.o.date;const day=RES.filter(x=>x.o.date===cur);const mins=Math.round(day.reduce((s,x)=>s+x.dur,0)/60);
+        html+=`<div class="dayh" data-d="${cur}"><b>Day ${c.day??"–"}</b><span>${fmtDay(cur)} · ${esc([...new Set(day.map(x=>x.o.label))].join(", "))} · ${day.length} clips, ${mins} min</span></div>`}
+      html+=cardHTML(c,i,out.f)});
+    g.innerHTML=html;
+  }else g.innerHTML=show.map((c,i)=>cardHTML(c,i,out.f)).join("");
+  if(!show.length)g.innerHTML=`<p class="empty" style="grid-column:1/-1">Nothing matches. Try fewer words, or clear the filters.</p>`;
+  $("more").hidden=RES.length<=S.shown;
+  g.querySelectorAll(".th").forEach(el=>seen.observe(el));
+  $("vg").setAttribute("aria-pressed",S.view==="grid");$("vd").setAttribute("aria-pressed",S.view==="days");
+  $("fp").setAttribute("aria-pressed",S.picks);$("fh").setAttribute("aria-pressed",S.hearts);
+  renderTour();facets();drawStrip();hash();
+}
+function facets(){
+  const r=run("country").res.map(x=>x[1]),cnt={};r.forEach(c=>cnt[c.country]=(cnt[c.country]||0)+1);
+  const list=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
+  $("countries").innerHTML=list.map(([k,n])=>`<button class="chip" data-c="${esc(k)}" aria-pressed="${S.country===k}">${esc(k)}<small>${n}</small></button>`).join("");
+  const days=new Set(CL.map(c=>c.o.date)).size,secs=CL.reduce((s,c)=>s+c.dur,0);
+  $("stats").innerHTML=`<div><b>${(window.COUNTRIES||[]).length}</b><span>countries</span></div><div><b>${CH.length}</b><span>stops</span></div><div><b>${days}</b><span>days filmed</span></div><div><b>${Math.round(secs/3600)}</b><span>hours</span></div>`;
+}
+$("countries").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;S.country=S.country===b.dataset.c?"":b.dataset.c;S.shown=60;
+  if(S.country){const c=CH.find(x=>x.country===S.country);if(c)flyTo(c.lon,c.lat)}render()};
+$("moreb").onclick=()=>{S.shown+=60;render()};
+$("sort").onchange=e=>{S.sort=e.target.value;S.shown=60;render()};
+$("vg").onclick=()=>{S.view="grid";render()};$("vd").onclick=()=>{S.view="days";S.shown=Math.max(S.shown,80);render()};
+$("fp").onclick=()=>{S.picks=!S.picks;S.shown=60;render()};$("fh").onclick=()=>{S.hearts=!S.hearts;S.shown=60;render()};
+
+/* ---------- Start here tour ---------- */
+function renderTour(){
+  const t=$("tour"),ids=(INDEX.tour||[]).filter(id=>INDEX.byId.has(id));
+  t.hidden=hasFilter()||!ids.length;if(t.hidden)return;
+  const cl=ids.map(id=>INDEX.byId.get(id));
+  t.innerHTML=`<h2>Start here</h2><p>${INDEX.tour_auto?"Highlights picked automatically, one per place and week. Adam's own picks will replace these.":"Adam's picks, in the order they happened."}</p>
+   <div class="row" id="trow">${cl.map((c,i)=>cardHTML(c,i,null).replace('data-i="'+i+'"','data-t="'+i+'"')).join("")}</div>
+   <div style="margin-top:8px"><button class="btn pri" id="tourplay" type="button">▶ Play the tour (${cl.length} clips)</button></div>`;
+  t.querySelectorAll(".th").forEach(el=>seen.observe(el));
+  $("tourplay").onclick=()=>openList(cl,0);
+}
+$("tour").onclick=e=>{if(e.target.closest("[data-act]")){cardAct(e);return}const c=e.target.closest(".card");if(!c||c.dataset.t==null)return;openList(INDEX.tour.map(id=>INDEX.byId.get(id)).filter(Boolean),+c.dataset.t)};
+
+/* ---------- thumbnails from the shared sprite sheets ---------- */
+async function sprite(n){
+  if(sprUrls.has(n))return sprUrls.get(n);
+  const p=(async()=>{const id=SPR.get(`gtl-sprite-s${String(n).padStart(3,"0")}.jpg`);if(!id)return null;return URL.createObjectURL(await api(id,{alt:"media"},true))})();
+  sprUrls.set(n,p);return p;
+}
+async function paint(el,k){
+  const c=INDEX.byId.get(el.dataset.id);if(!c?.sp)return;const sp=INDEX.sprite,[sheet,row,n]=c.sp;
+  const url=await sprite(sheet);if(!url)return;k=Math.max(0,Math.min(n-1,k??Math.min(1,n-1)));
+  el.style.backgroundImage=`url(${url})`;el.style.backgroundSize=`${sp.per_clip*100}% ${sp.per_sheet*100}%`;
+  el.style.backgroundPosition=`${sp.per_clip>1?k/(sp.per_clip-1)*100:0}% ${sp.per_sheet>1?row/(sp.per_sheet-1)*100:0}%`;
+}
+const seen=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){seen.unobserve(e.target);paint(e.target)}}),{rootMargin:"300px"});
+document.addEventListener("pointermove",e=>{const t=e.target.closest&&e.target.closest(".card .th");if(!t)return;const r=t.getBoundingClientRect(),c=INDEX.byId.get(t.dataset.id);
+  if(c?.sp)paint(t,Math.floor((e.clientX-r.left)/r.width*c.sp[2]))});
+
+/* ---------- opening clips in the player, hearts, links ---------- */
+function openList(clips,i,startSecs){
+  const list=clips.slice(Math.max(0,i),Math.max(0,i)+80).map((c,k)=>[c.drive,c.pv||"",`${c.o.label} · ${fmtDate(c.t)}`,k===0&&startSecs?Math.max(0,startSecs-2):0,c.hd||""].map(x=>encodeURIComponent(x??"").replace(/~/g,"%7E")).join("~")).join("|");
+  location.href=`${TEST_API?"../player/":"../"}index.html${TEST_API?location.search:""}#q=light&i=0&list=${encodeURIComponent(list)}`;
+}
+function cardAct(e){
+  const b=e.target.closest("[data-act]");if(!b)return false;e.stopPropagation();
+  const id=b.closest(".card").dataset.id,c=INDEX.byId.get(id);
+  if(b.dataset.act==="heart"){if(HEART[id])delete HEART[id];else HEART[id]={m:0};store.set("gtx-hearts",HEART);b.classList.toggle("on",!!HEART[id]);b.textContent=HEART[id]?"♥":"♡";pickCount();if(S.hearts)render()}
+  else if(b.dataset.act==="share"){const sn=c._sn?`&t=${c._sn.a}`:"";const url=location.origin+location.pathname+`#clip=${id}${sn}`;
+    (navigator.clipboard?navigator.clipboard.writeText(url):Promise.reject()).then(()=>toast("Link copied"),()=>prompt("Copy this link",url))}
+  return true;
+}
+$("grid").addEventListener("click",e=>{
+  if(cardAct(e))return;
+  const d=e.target.closest(".dayh");if(d){S.range=[d.dataset.d,d.dataset.d];S.view="grid";render();const c=CH.find(x=>x.a<=d.dataset.d&&x.b>=d.dataset.d);if(c)flyTo(c.lon,c.lat);return}
+  const b=e.target.closest(".card");if(!b)return;const i=+b.dataset.i;openList(RES,i,RES[i]._sn?.a)});
+$("grid").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.classList.contains("card"))e.target.click()});
+$("watch").onclick=()=>{   // the best clips of whatever is showing, played in the order they happened
+  const best=[...RES].sort((a,b)=>b.pick-a.pick||(b.hl||0)-(a.hl||0)).slice(0,40).sort((a,b)=>a.t<b.t?-1:1);openList(best,0)};
+
+/* hearts -> My picks -> send */
+const pickCount=()=>{const n=Object.keys(HEART).length;$("pickn").textContent=n?`(${n})`:""};
+$("pickb").onclick=()=>{
+  const ids=Object.keys(HEART).filter(id=>INDEX.byId.has(id));
+  $("plist").innerHTML=ids.map(id=>{const c=INDEX.byId.get(id);return `<li data-id="${id}"><span>${esc(c.o.label)} · ${fmtDate(c.t)} ${c.t.slice(11,16)}</span><label><input type="checkbox" ${HEART[id].m?"checked":""}> more</label></li>`}).join("")||`<li><span style="color:var(--mute)">Heart clips with the ♡ button and they show up here.</span></li>`;
+  $("psend").hidden=!INDEX.feedback||!ids.length;$("pickd")?.showModal?.();$("picks").showModal();
+};
+$("plist").onchange=e=>{const li=e.target.closest("li");if(li&&HEART[li.dataset.id]){HEART[li.dataset.id].m=e.target.checked?1:0;store.set("gtx-hearts",HEART)}};
+function picksText(){
+  const ids=Object.keys(HEART).filter(id=>INDEX.byId.has(id));
+  return ($("pmsg").value?$("pmsg").value+"\n\n":"")+"Clips I liked:\n"+ids.map(id=>{const c=INDEX.byId.get(id);return `- ${c.o.label}, ${fmtDate(c.t)} ${c.t.slice(11,16)} (${id})${HEART[id].m?" - more of this please":""}`}).join("\n");
+}
+$("pcopy").onclick=()=>{const t=picksText();(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("Copied"),()=>prompt("Copy this",t))};
+$("psend").onclick=()=>{location.href=`mailto:${encodeURIComponent(INDEX.feedback)}?subject=${encodeURIComponent("My picks from your trip")}&body=${encodeURIComponent(picksText().slice(0,1800))}`};
+$("pclose").onclick=()=>$("picks").close();
+
+/* ---------- trip stats card ---------- */
+function haversine(a,b){const R=6371,r=Math.PI/180,dl=(b.lat-a.lat)*r,dn=(b.lon-a.lon)*r,x=Math.sin(dl/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
+function tripStats(){
+  let km=0;for(let i=0;i<CH.length-1;i++)km+=haversine(CH[i],CH[i+1]);
+  const days=new Map();CL.forEach(c=>{const d=days.get(c.o.date)||{secs:0,label:c.o.label};d.secs+=c.dur;days.set(c.o.date,d)});
+  const busy=[...days].sort((a,b)=>b[1].secs-a[1].secs)[0];
+  const stay=CH.map(c=>({c,d:(Date.parse(c.b)-Date.parse(c.a))/864e5+1})).sort((a,b)=>b.d-a.d)[0];
+  const byPlace={};CL.forEach(c=>byPlace[c.o.label]=(byPlace[c.o.label]||0)+c.dur);
+  const top=Object.entries(byPlace).sort((a,b)=>b[1]-a[1])[0];
+  const first=CL[0].o.date,last=CL.at(-1).o.date,span=Math.round((Date.parse(last)-Date.parse(first))/864e5)+1;
+  const night=Math.round(CL.filter(c=>c.o.tod==="night").length/CL.length*100);
+  return[["Distance travelled",Math.round(km).toLocaleString()+" km"],["Days on the road",span],["Countries",(window.COUNTRIES||[]).length],["Hours of footage",Math.round(CL.reduce((s,c)=>s+c.dur,0)/3600)],
+    ["Longest stay",`${stay.c.label}, ${Math.round(stay.d)} days`],["Most filmed place",top[0]],["Busiest filming day",`${fmtDate(busy[0])} (${Math.round(busy[1].secs/60)} min)`],["Filmed at night",night+"% of clips"]];
+}
+function drawStatCard(){
+  const c=$("statc"),x=c.getContext("2d"),st=getComputedStyle(document.body),W=1080,H=1350;
+  x.fillStyle="#0e0e0c";x.fillRect(0,0,W,H);
+  x.fillStyle="#ff8a4f";x.font="600 34px -apple-system,Helvetica,Arial";x.fillText("THE JOURNEY SO FAR",70,110);
+  x.fillStyle="#f1eee6";x.font="700 76px -apple-system,Helvetica,Arial";
+  const title=(INDEX.owner?.trip||"A year of travel");const words=title.split(" ");let line="",y=200;
+  for(const w of words){if(x.measureText(line+w).width>940){x.fillText(line,70,y);line="";y+=86}line+=w+" "}x.fillText(line,70,y);
+  y+=70;const rows=tripStats();
+  rows.forEach(([k,v],i)=>{const cx=70+(i%2)*500,cy=y+Math.floor(i/2)*200;x.fillStyle="#a29d90";x.font="400 30px -apple-system,Helvetica,Arial";x.fillText(k,cx,cy);
+    x.fillStyle="#f1eee6";x.font="700 "+(String(v).length>16?38:56)+"px -apple-system,Helvetica,Arial";
+    const s=String(v);let fs=String(v).length>16?38:56;while(x.measureText(s).width>440&&fs>24){fs-=2;x.font=`700 ${fs}px -apple-system,Helvetica,Arial`}x.fillText(s,cx,cy+66)});
+  // route dots
+  const R=CH.length?CH:[];if(R.length>1){const lo=Math.min(...R.map(p=>p.lon)),hi=Math.max(...R.map(p=>p.lon)),la0=Math.min(...R.map(p=>p.lat)),la1=Math.max(...R.map(p=>p.lat));
+    const bx=70,by=y+4*200+10,bw=940,bh=Math.max(120,H-by-60),sx=bw/Math.max(1,hi-lo),sy=bh/Math.max(1,la1-la0),s=Math.min(sx,sy);
+    const px=p=>bx+(bw-(hi-lo)*s)/2+(p.lon-lo)*s,py=p=>by+bh-((p.lat-la0)*s)-(bh-(la1-la0)*s)/2;
+    x.strokeStyle="#ff8a4f";x.lineWidth=3;x.beginPath();R.forEach((p,i)=>i?x.lineTo(px(p),py(p)):x.moveTo(px(p),py(p)));x.stroke();
+    R.forEach(p=>{x.fillStyle=p.col;x.beginPath();x.arc(px(p),py(p),8,0,7);x.fill()})}
+}
+$("statb").onclick=()=>{drawStatCard();$("statd").showModal()};
+$("statclose").onclick=()=>$("statd").close();
+$("statsave").onclick=()=>$("statc").toBlob(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="my-trip-stats.png";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)});
+
+/* ---------- search box, shareable state ---------- */
+$("q").oninput=e=>{S.q=e.target.value;S.shown=60;render()};
+$("sform").onsubmit=e=>e.preventDefault();
+$("clear").onclick=()=>{Object.assign(S,{q:"",country:"",place:"",range:null,cell:"",picks:false,hearts:false,shown:60});$("q").value="";G.sel=null;render()};
+function hash(){try{const h=new URLSearchParams();if(S.q)h.set("q",S.q);if(S.country)h.set("c",S.country);if(S.place)h.set("p",S.place);if(S.range)h.set("r",S.range.join("_"));history.replaceState(null,"",location.pathname+location.search+(h.toString()?"#"+h:""))}catch(e){}}
+function readHash(){const h=new URLSearchParams(location.hash.slice(1));S.q=h.get("q")||"";S.country=h.get("c")||"";S.place=h.get("p")||"";S.range=h.get("r")?h.get("r").split("_"):null;$("q").value=S.q;G.sel=S.place||null;return h}
+function hints(){
+  const ex=["Bangkok january","golden hour","night","long clips in Vietnam","day 100","Tokyo may","4k"];
+  const sp=CL.some(c=>c.o.sx.length)?["pork belly","scooter","rain"]:[];
+  $("hints").innerHTML="Try "+[...ex,...sp].map(x=>`<button class="chip" type="button" data-q="${x}">${x}</button>`).join("");
+}
+$("hints").onclick=e=>{const b=e.target.closest("[data-q]");if(!b)return;S.q=b.dataset.q;$("q").value=S.q;S.shown=60;render()};
+
+/* ---------- date strip ---------- */
+const dc=$("dc");let DAYS=[];
+function buildDays(){
+  const m=new Map();CL.forEach(c=>{const d=m.get(c.o.date)||{date:c.o.date,secs:0,country:c.country};d.secs+=c.dur;m.set(c.o.date,d)});
+  DAYS=[...m.values()].sort((a,b)=>a.date<b.date?-1:1);
+  $("d0").textContent=DAYS.length?fmtDate(DAYS[0].date):"";$("d1").textContent=DAYS.length?fmtDate(DAYS.at(-1).date):"";
+}
+function drawStrip(){
+  if(!DAYS.length)return;const dpr=devicePixelRatio||1,w=dc.clientWidth,h=dc.clientHeight;dc.width=w*dpr;dc.height=h*dpr;
+  const x=dc.getContext("2d");x.scale(dpr,dpr);x.clearRect(0,0,w,h);
+  const t0=Date.parse(DAYS[0].date),t1=Date.parse(DAYS.at(-1).date),span=Math.max(1,(t1-t0)/864e5+1),bw=Math.max(1,w/span);
+  const max=Math.max(...DAYS.map(d=>d.secs)),st=getComputedStyle(document.body);
+  const visible=new Set(run("range").res.map(r=>r[1].o.date));
+  DAYS.forEach(d=>{const i=(Date.parse(d.date)-t0)/864e5,bh=Math.max(2,d.secs/max*(h-18));
+    const ci=(window.COUNTRIES||[]).indexOf(d.country);x.fillStyle=PALETTE[(ci<0?0:ci)%PALETTE.length];x.globalAlpha=visible.has(d.date)?1:.25;
+    x.fillRect(i*bw,h-bh-2,Math.max(1,bw-.5),bh)});
+  x.globalAlpha=1;
+  if(S.range){const a=(Date.parse(S.range[0])-t0)/864e5*bw,b=((Date.parse(S.range[1])-t0)/864e5+1)*bw;x.strokeStyle=st.color;x.lineWidth=2;x.strokeRect(a,1,b-a,h-2)}
+  if(G.dayCursor){const a=(Date.parse(G.dayCursor)-t0)/864e5*bw;x.fillStyle=st.color;x.fillRect(a,0,2,h)}
+  $("drange").textContent=S.range?(S.range[0]===S.range[1]?fmtDate(S.range[0]):fmtDate(S.range[0])+" to "+fmtDate(S.range[1])):"All dates · drag to choose";
+  drawStrip.t0=t0;drawStrip.bw=bw;
+}
+let dragA=null;
+const dayAt=e=>{const r=dc.getBoundingClientRect(),i=Math.max(0,Math.floor((e.clientX-r.left)/drawStrip.bw));return new Date(drawStrip.t0+i*864e5).toISOString().slice(0,10)};
+dc.onpointerdown=e=>{dc.setPointerCapture(e.pointerId);dragA=dayAt(e)};
+dc.onpointermove=e=>{if(!dragA)return;const b=dayAt(e);S.range=[dragA<b?dragA:b,dragA<b?b:dragA];S.shown=60;render()};
+dc.onpointerup=e=>{if(!dragA)return;const b=dayAt(e);if(b===dragA&&S.range&&S.range[0]===S.range[1]&&S.range[0]===b){S.range=null}else if(!S.range||(S.range[0]===S.range[1]&&b===dragA)){S.range=[b,b]}
+  dragA=null;S.shown=60;render()};
+addEventListener("resize",()=>{drawStrip();sizeGlobe()});
+
+/* ---------- globe + flat clip map ---------- */
+const G={lon:100,lat:12,spin:true,sel:null,play:null,mode:"globe",dayCursor:null};
+const M={lon:105,lat:18,z:3.2};
+const gc=$("gc"),R2=Math.PI/180;let gw=0,rings=null,visited=new Set();
+function sizeGlobe(){const r=gc.getBoundingClientRect(),dpr=devicePixelRatio||1;gw=r.width;gc.width=r.width*dpr;gc.height=r.height*dpr}
+async function loadTopo(){
+  const t=await (await fetch("countries.json")).json();
+  const [sx,sy]=t.transform.scale,[tx,ty]=t.transform.translate;
+  const arcs=t.arcs.map(a=>{let x=0,y=0;return a.map(p=>{x+=p[0];y+=p[1];return[x*sx+tx,y*sy+ty]})});
+  const ring=ids=>ids.flatMap(i=>i<0?arcs[~i].slice().reverse():arcs[i]);
+  rings=[];
+  for(const g of t.objects.countries.geometries){
+    const polys=g.type==="Polygon"?[g.arcs]:g.type==="MultiPolygon"?g.arcs:[];
+    for(const p of polys)for(const r of p.slice(0,1))rings.push({name:g.properties?.name,pts:ring(r)});
+  }
+}
+function P(lon,lat,R){
+  const l=(lon-G.lon)*R2,p=lat*R2,p0=G.lat*R2,cl=Math.cos(p);
+  const x=cl*Math.sin(l),y=Math.cos(p0)*Math.sin(p)-Math.sin(p0)*cl*Math.cos(l),z=Math.sin(p0)*Math.sin(p)+Math.cos(p0)*cl*Math.cos(l);
+  return[x*R,-y*R,z>0,z];
+}
+function slerp(a,b,t){
+  const v=(lo,la)=>{const l=lo*R2,p=la*R2;return[Math.cos(p)*Math.cos(l),Math.cos(p)*Math.sin(l),Math.sin(p)]};
+  const A=v(a.lon,a.lat),B=v(b.lon,b.lat),d=Math.acos(Math.max(-1,Math.min(1,A[0]*B[0]+A[1]*B[1]+A[2]*B[2])));
+  if(d<1e-6)return{lon:a.lon,lat:a.lat};const s=Math.sin(d),k1=Math.sin((1-t)*d)/s,k2=Math.sin(t*d)/s;
+  const x=k1*A[0]+k2*B[0],y=k1*A[1]+k2*B[1],z=k1*A[2]+k2*B[2];return{lon:Math.atan2(y,x)/R2,lat:Math.atan2(z,Math.hypot(x,y))/R2};
+}
+function drawGlobe(){
+  const dpr=devicePixelRatio||1,x=gc.getContext("2d"),W=gc.width/dpr,R=W*.44,cx=W/2,cy=W/2,st=getComputedStyle(document.body);
+  const css=n=>st.getPropertyValue(n).trim();
+  x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,W,W);x.translate(cx,cy);
+  x.fillStyle=css("--sea");x.beginPath();x.arc(0,0,R,0,7);x.fill();x.strokeStyle=css("--line");x.lineWidth=1;x.stroke();
+  if(rings){
+    for(const r of rings){
+      const vis=visited.has(r.name);x.beginPath();let px=1e9,py=1e9,any=false,begun=false;
+      for(const [lo,la] of r.pts){let [X,Y,v]=P(lo,la,R);if(!v){const m=Math.hypot(X,Y)||1;X=X/m*R;Y=Y/m*R}else any=true;
+        if(Math.abs(X-px)+Math.abs(Y-py)<.8)continue;px=X;py=Y;if(begun)x.lineTo(X,Y);else{x.moveTo(X,Y);begun=true}}
+      if(!any)continue;x.closePath();x.fillStyle=vis?css("--visit"):css("--land");x.fill();
+    }
+  }
+  for(let i=0;i<CH.length-1;i++){
+    const a=CH[i],b=CH[i+1];const pts=[];for(let k=0;k<=20;k++)pts.push(slerp(a,b,k/20));
+    const frac=G.play&&i===G.play.leg?G.play.t:1;
+    x.lineWidth=G.play?(i<=G.play.leg?2:1):1.4;x.strokeStyle=css("--accent");x.globalAlpha=G.play&&i>G.play.leg?.18:.75;
+    x.beginPath();let on=false;
+    for(let k=0;k<=20;k++){if(k/20>frac&&G.play&&i===G.play.leg)break;const [X,Y,v]=P(pts[k].lon,pts[k].lat,R);if(!v){on=false;continue}x[on?"lineTo":"moveTo"](X,Y);on=true}
+    x.stroke();x.globalAlpha=1;
+  }
+  G.dots=[];
+  CH.forEach((c,i)=>{const [X,Y,v]=P(c.lon,c.lat,R);if(!v)return;const r=3+Math.sqrt(c.secs/60)/2.4,sel=G.sel===c.label,reached=!G.play||i<=G.play.leg+(G.play.t>0?1:0);
+    G.dots.push({X:X+cx,Y:Y+cy,r,c});x.globalAlpha=reached?1:.25;x.fillStyle=c.col;x.beginPath();x.arc(X,Y,r,0,7);x.fill();
+    x.lineWidth=sel?3:1.5;x.strokeStyle=sel?css("--ink"):css("--bg");x.stroke();x.globalAlpha=1});
+  const pos=G.play?G.play.pos:null;
+  if(pos){const [X,Y,v]=P(pos.lon,pos.lat,R);if(v){x.fillStyle=css("--ink");x.beginPath();x.arc(X,Y,6,0,7);x.fill();x.strokeStyle=css("--accent");x.lineWidth=3;x.stroke()}}
+  x.translate(-cx,-cy);
+}
+/* flat map: every clip with a real GPS fix is a dot; click a dot to see the clips filmed there */
+const mx=lon=>lon,my=lat=>{const s=Math.sin(Math.max(-82,Math.min(82,lat))*R2);return .5*Math.log((1+s)/(1-s))/R2};
+function mapXY(lon,lat,W){const k=W/360*Math.pow(2,M.z-1.2);return[W/2+(lon-M.lon)*k,W/2-(my(lat)-my(M.lat))*k]}
+function drawMap(){
+  const dpr=devicePixelRatio||1,x=gc.getContext("2d"),W=gc.width/dpr,st=getComputedStyle(document.body),css=n=>st.getPropertyValue(n).trim();
+  x.setTransform(dpr,0,0,dpr,0,0);x.fillStyle=css("--sea");x.fillRect(0,0,W,W);
+  if(rings)for(const r of rings){x.beginPath();let px=null,begun=false;
+    for(const [lo,la] of r.pts){const [X,Y]=mapXY(lo,la,W);if(px!==null&&Math.abs(lo-px)>180){begun=false}px=lo;if(begun)x.lineTo(X,Y);else{x.moveTo(X,Y);begun=true}}
+    x.fillStyle=visited.has(r.name)?css("--visit"):css("--land");x.fill()}
+  const cells=new Map();for(const r of RES){if(r.lat==null)continue;const k=r.o.cell;let c=cells.get(k);if(!c){c={lat:r.lat,lon:r.lon,n:0,col:PALETTE[Math.max(0,(window.COUNTRIES||[]).indexOf(r.country))%PALETTE.length],key:k};cells.set(k,c)}c.n++}
+  G.dots=[];for(const c of cells.values()){const [X,Y]=mapXY(c.lon,c.lat,W);if(X<-10||Y<-10||X>W+10||Y>W+10)continue;const r=2.5+Math.sqrt(c.n)*1.6;G.dots.push({X,Y,r,cell:c});
+    x.globalAlpha=S.cell&&S.cell!==c.key?.3:.85;x.fillStyle=c.col;x.beginPath();x.arc(X,Y,r,0,7);x.fill();x.lineWidth=S.cell===c.key?3:1;x.strokeStyle=S.cell===c.key?css("--ink"):css("--bg");x.stroke();x.globalAlpha=1}
+}
+function setMode(m){G.mode=m;$("mg").setAttribute("aria-pressed",m==="globe");$("mm").setAttribute("aria-pressed",m==="map");$("play").hidden=m==="map";if(m==="map"&&G.play)stopPlay();if(m==="globe")S.cell="";render()}
+$("mg").onclick=()=>setMode("globe");$("mm").onclick=()=>{setMode("map");if(S.place){const c=CH.find(x=>x.label===S.place);if(c){M.lon=c.lon;M.lat=c.lat;M.z=6}}};
+function flyTo(lon,lat){if(G.mode==="map"){M.lon=lon;M.lat=lat;M.z=Math.max(M.z,5);return}G.fly={lon,lat};G.spin=false}
+let last=0;
+function frame(ts){
+  const dt=Math.min(250,ts-last)/1000;last=ts;
+  if(G.mode==="map"){drawMap();return requestAnimationFrame(frame)}
+  if(G.fly){const dl=((G.fly.lon-G.lon+540)%360)-180;G.lon+=dl*Math.min(1,dt*4);G.lat+=(G.fly.lat-G.lat)*Math.min(1,dt*4);if(Math.abs(dl)<.2&&Math.abs(G.fly.lat-G.lat)<.2)G.fly=null}
+  else if(G.spin&&!G.drag&&!G.play)G.lon+=dt*6;
+  if(G.play){const p=G.play;p.t+=dt/p.legSecs;while(p.t>=1&&p.leg<CH.length-2){p.t-=1;p.leg++}
+    if(p.leg>=CH.length-2&&p.t>=1){stopPlay(true)}else{
+      const a=CH[p.leg],b=CH[p.leg+1];p.pos=slerp(a,b,Math.min(1,p.t));G.lon+=(((p.pos.lon-G.lon+540)%360)-180)*Math.min(1,dt*3);G.lat+=(p.pos.lat-G.lat)*Math.min(1,dt*3);
+      const ms=Date.parse(a.a)+(Date.parse(b.a)-Date.parse(a.a))*Math.min(1,p.t);G.dayCursor=new Date(ms).toISOString().slice(0,10);
+      $("nowtxt").textContent=`${p.t<.5?a.label:b.label} · ${fmtDate(G.dayCursor)}`;
+      if(ts-(p.lastStrip||0)>120){p.lastStrip=ts;drawStrip()}}}
+  drawGlobe();requestAnimationFrame(frame);
+}
+function startPlay(){if(CH.length<2)return;G.spin=false;G.play={leg:0,t:0,legSecs:Math.max(.9,Math.min(2,38/CH.length)),pos:{lon:CH[0].lon,lat:CH[0].lat}};$("play").textContent="Stop"}
+function stopPlay(done){G.play=null;G.dayCursor=null;$("play").textContent="Play the journey";$("nowtxt").textContent=done?"That's the whole route.":"";drawStrip()}
+$("play").onclick=()=>G.play?stopPlay():startPlay();
+gc.onpointerdown=e=>{gc.setPointerCapture(e.pointerId);G.drag={x:e.clientX,y:e.clientY,moved:false};G.spin=false;G.fly=null;gc.style.cursor="grabbing"};
+gc.onpointermove=e=>{
+  const r=gc.getBoundingClientRect();
+  if(G.drag){const dx=e.clientX-G.drag.x,dy=e.clientY-G.drag.y;if(Math.abs(dx)+Math.abs(dy)>3)G.drag.moved=true;
+    if(G.mode==="map"){const k=r.width/360*Math.pow(2,M.z-1.2);M.lon-=dx/k;M.lat=Math.max(-70,Math.min(75,M.lat+dy/k*.85))}
+    else{G.lon-=dx*.4;G.lat=Math.max(-70,Math.min(70,G.lat+dy*.4))}
+    G.drag.x=e.clientX;G.drag.y=e.clientY;return}
+  const px=e.clientX-r.left,py=e.clientY-r.top;const d=(G.dots||[]).find(d=>Math.hypot(d.X-px,d.Y-py)<=d.r+5);
+  const tip=$("tip");if(d){tip.hidden=false;tip.style.left=d.X+"px";tip.style.top=d.Y+"px";
+    tip.textContent=d.c?`${d.c.label}, ${d.c.country} · ${fmtDate(d.c.a)}${d.c.a===d.c.b?"":" to "+fmtDate(d.c.b)}`:`${d.cell.n} clip${d.cell.n===1?"":"s"} filmed here`;gc.style.cursor="pointer"}else{tip.hidden=true;gc.style.cursor="grab"}
+};
+gc.onpointerup=e=>{const moved=G.drag?.moved;G.drag=null;gc.style.cursor="grab";if(moved)return;
+  const r=gc.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,d=(G.dots||[]).find(d=>Math.hypot(d.X-px,d.Y-py)<=d.r+5);
+  if(G.mode==="map"){S.cell=d&&S.cell!==d.cell.key?d.cell.key:"";S.shown=60;render();return}
+  if(d){S.place=S.place===d.c.label?"":d.c.label;G.sel=S.place||null;S.shown=60;if(S.place)flyTo(d.c.lon,d.c.lat);render()}};
+gc.addEventListener("wheel",e=>{if(G.mode!=="map")return;e.preventDefault();M.z=Math.max(2.2,Math.min(11,M.z-e.deltaY*.002))},{passive:false});
+
+/* ---------- boot ---------- */
+async function start(){
+  $("welcome").hidden=true;$("signin").hidden=true;$("who").textContent=TEST_API?"Test mode":"Signed in";
+  try{await loadIndex()}catch(e){if(String(e.message)==="401")return;$("app").hidden=false;$("notes").innerHTML=`<div class="note">${esc(e.message==="403"?"This Google account can't read the library.":e.message)}</div>`;return}
+  try{await loadTopo();visited=new Set(CH.map(c=>COUNTRY_NAME[c.country]||c.country))}catch(e){}
+  $("app").hidden=false;$("statb").hidden=false;$("pickb").hidden=false;pickCount();
+  if(INDEX.welcome){$("hello").hidden=false;$("hello").textContent=INDEX.welcome}
+  buildDays();hints();const h=readHash();sizeGlobe();
+  if(S.place){const c=CH.find(x=>x.label===S.place);if(c)flyTo(c.lon,c.lat)}else{G.lon=100;G.lat=14;G.spin=true}
+  render();requestAnimationFrame(frame);
+  const id=h.get("clip");if(id&&INDEX.byId.has(id))openList([INDEX.byId.get(id)],0,Number(h.get("t"))||0);   // a shared link goes straight to the moment
+}
+loadToken();
+if(token)start();else{$("welcome").hidden=false;$("signin").hidden=false;initGoogle()}
+</script>
+</body>
+</html>
