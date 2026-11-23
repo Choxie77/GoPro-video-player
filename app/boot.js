@@ -223,9 +223,10 @@
     try {
       const f = (await find("name='active_session.json'"))[0];
       const s = f ? await media(f.id) : null;
-      const at = s?.at ? Date.parse(s.at) : 0;
-      sessionShown = !!at && Date.now() - at < ACTIVE_MS;
-      if (sessionShown) barSay(`Claude session working: ${String(s.title || s.session || "unnamed").slice(0, 70)}. Avoid starting another on this project.`);
+      // active_session.json is either one session {title, at} or {sessions: {<id>: {title, at}}} written by tools/heartbeat.py
+      const live = Object.values(s?.sessions || (s?.at ? {one: s} : {})).filter((x) => x?.at && Date.now() - Date.parse(x.at) < ACTIVE_MS);
+      sessionShown = live.length > 0;
+      if (sessionShown) barSay(`${live.length} Claude session${live.length > 1 ? "s" : ""} working: ${live.map((x) => String(x.title || x.session || "unnamed").slice(0, 40)).join(", ")}. Avoid starting another on this project.`);
       else if (!pending.length) barSay("");
     } catch (e) {}
   }
@@ -236,7 +237,7 @@
   const dialog = el("dialog", {id: "gta-player", "aria-label": "Video player"}, closeBtn, frame);
   const closePlayer = () => { if (dialog.open) dialog.close(); };
   closeBtn.onclick = closePlayer;
-  dialog.addEventListener("close", () => frame.removeAttribute("src"));
+  dialog.addEventListener("close", () => { frame.src = "about:blank"; }); // unloads the player: stops the video and makes the next open start fresh
   function openPlayer(href) {
     const u = new URL(href, location.href);
     const params = new URLSearchParams({embed: "1"});
@@ -255,7 +256,7 @@
     const c = DATA.clips.find((x) => x.drive === orig);
     const reply = (text) => frame.contentWindow?.postMessage({type: "gta-done", text}, location.origin);
     if (!c) return reply("This clip isn't in your Library yet");
-    if (["best", "keep", "reject"].includes(action)) { await saveMark(c.id, {r: action}, true); return reply({best: "Marked Best", keep: "Marked Keep", reject: "Marked Reject"}[action]); }
+    if (["best", "keep", "maybe", "reject"].includes(action)) { await saveMark(c.id, {r: action}, true); return reply({best: "Marked Best", keep: "Marked Keep", maybe: "Marked Maybe", reject: "Marked Reject"}[action]); }
     if (action === "moment" && Number.isFinite(t)) {
       const r2 = (x) => Math.round(x * 100) / 100, end = c.dur || t + 4, items = store.moments.get(c.id)?.items || [];
       const a = r2(Math.max(0, t - 2)), b = r2(Math.min(end, t + 4));
