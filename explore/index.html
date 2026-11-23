@@ -8,6 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>Explore the Journey</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{--bg:#f4f2ec;--panel:#fff;--ink:#1c1a16;--mute:#6f6a5f;--line:#e3dfd3;--accent:#d2561f;--sea:#e8edf0;--land:#cfc9b8;--visit:#e7a27a}
 @media (prefers-color-scheme:dark){:root{--bg:#0e0e0c;--panel:#18170f;--ink:#f1eee6;--mute:#a29d90;--line:#2c2a22;--accent:#ff8a4f;--sea:#12151a;--land:#2b2a22;--visit:#6d4a33}}
@@ -157,7 +158,11 @@ function initGoogle(){
     if(r.error)return;token=r.access_token;tokenExpires=Date.now()+(r.expires_in-60)*1000;saveToken();start();
   }});return true;
 }
-function signIn(){if(!initGoogle())return setTimeout(signIn,300);tokenClient.requestAccessToken({prompt:""})}
+let signTries=0;
+function signIn(){
+  if(!initGoogle()){if(++signTries>25){toast("Google sign-in didn't load. Check your connection or an ad blocker, then reload.");signTries=0;return}return setTimeout(signIn,300)}
+  signTries=0;tokenClient.requestAccessToken({prompt:""});
+}
 $("signin").onclick=$("signin2").onclick=signIn;
 async function api(path,params={},blob){
   const base=path?API+path:API.replace(/\/$/,"");
@@ -585,10 +590,4 @@ async function start(){
   buildDays();hints();const h=readHash();sizeGlobe();
   if(S.place){const c=CH.find(x=>x.label===S.place);if(c)flyTo(c.lon,c.lat)}else{G.lon=100;G.lat=14;G.spin=true}
   render();requestAnimationFrame(frame);
-  const id=h.get("clip");if(id&&INDEX.byId.has(id))openList([INDEX.byId.get(id)],0,Number(h.get("t"))||0);   // a shared link goes straight to the moment
-}
-loadToken();
-if(token)start();else{$("welcome").hidden=false;$("signin").hidden=false;initGoogle()}
-</script>
-</body>
-</html>
+  const id=h.get("clip");if(id&&INDEX.byI
