@@ -1567,6 +1567,22 @@ function buildMap() {
   $("mp-in").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 2);
   $("mp-out").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 0.5);
   $("mp-fit").onclick = () => select("journey", "");
+  $("mp-fs").onclick = () => {
+    const w = $("mp-wrap"), native = document.fullscreenElement || document.webkitFullscreenElement;
+    if (native || w.classList.contains("pseudo-fs")) { w.classList.remove("pseudo-fs", "is-fs"); if (native) (document.exitFullscreen || document.webkitExitFullscreen).call(document); document.documentElement.style.overflow = ""; $("mp-fs").title = "Full screen"; return; }
+    const req = w.requestFullscreen || w.webkitRequestFullscreen;
+    const fall = () => { if (document.fullscreenElement || document.webkitFullscreenElement || w.classList.contains("pseudo-fs")) return; w.classList.add("pseudo-fs", "is-fs"); document.documentElement.style.overflow = "hidden"; };
+    if (req) { try { Promise.resolve(req.call(w)).catch(fall); } catch (e) { fall(); } setTimeout(fall, 500); }
+    else fall();
+    $("mp-fs").title = "Exit full screen";
+  };
+  if (!window.__mapFsBound) {
+    window.__mapFsBound = true;
+    const sync = () => { const w = $("mp-wrap"), on = !!(document.fullscreenElement || document.webkitFullscreenElement); if (w && !w.classList.contains("pseudo-fs")) w.classList.toggle("is-fs", on); if (!on && w && !w.classList.contains("pseudo-fs")) $("mp-fs").title = "Full screen"; };
+    document.addEventListener("fullscreenchange", sync); document.addEventListener("webkitfullscreenchange", sync);
+    document.addEventListener("keydown", (e) => { const w = $("mp-wrap"); if (e.key === "Escape" && w && w.classList.contains("pseudo-fs")) $("mp-fs").onclick(); });
+  }
+  $("mp-world").onclick = () => svg.transition().duration(900).call(zoom.transform, d3.zoomIdentity.translate(W / 2 - (W / 2) * M.minK, H / 2 - proj([0, 22])[1] * M.minK).scale(M.minK));
   $("mp-world").onclick = () => svg.transition().duration(900).call(zoom.transform, d3.zoomIdentity.translate(W / 2 - (W / 2) * M.minK, H / 2 - proj([0, 22])[1] * M.minK).scale(M.minK));
   if (keepView) svg.call(zoom.transform, M.t);
   else { M.t = d3.zoomIdentity; svg.call(zoom.transform, d3.zoomIdentity.scale(M.minK)); flyTo(M.sel?.clips || clips, 2500, 0); }

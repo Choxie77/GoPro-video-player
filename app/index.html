@@ -541,6 +541,36 @@ dialog::backdrop { background: rgba(32,33,36,.55); }
 .chipbtn[aria-pressed="true"] em { color: var(--bg); }
 .crumbs, .scalebar, .maplegend, .map-ctl button { border-color: var(--line); border-radius: 10px; }
 .map-ctl button { border-radius: 50%; }
+/* map polish: softer sea, route halos, glass controls, bolder pins, real full screen */
+.mapwrap { border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent); box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 12px 32px -12px rgb(0 0 0 / .35); }
+.mapwrap #mp-svg { background: radial-gradient(120% 90% at 50% 40%, color-mix(in srgb, var(--ocean) 88%, var(--ink) 12%), var(--ocean) 70%); }
+.country { stroke-opacity: .85; stroke-width: .5; }
+.country.visited { fill: color-mix(in srgb, var(--route) 14%, var(--land)); }
+.country.visited:hover { fill: color-mix(in srgb, var(--route) 24%, var(--land)); }
+.graticule { stroke-opacity: .16; }
+.leg { stroke-width: 2.8; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--route) 55%, transparent)); }
+.leg.flight, .jr-live.flight { stroke-width: 2.4; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--flight) 65%, transparent)); }
+.jr-done, .jr-live { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--route) 60%, transparent)); }
+.track { stroke-opacity: .7; stroke-width: 1.6; }
+.clabel { stroke-width: 4px; letter-spacing: .02em; }
+.clabel.visited { font-size: 14px; letter-spacing: .3em; opacity: .9; }
+.pl text { stroke-width: 3.5px; }
+.pin .ph { border-radius: 9px; border-width: 2.5px; box-shadow: 0 0 0 2px var(--pin-ring), 0 6px 14px rgb(0 0 0 / .4); transition: transform .15s; }
+.pin:hover .ph, .pin.sel .ph { transform: scale(1.08); }
+.pin .nm { border-radius: 999px; padding: 2px 9px; font-weight: 600; box-shadow: 0 2px 6px rgb(0 0 0 / .3); }
+.pin .ph b { box-shadow: 0 0 0 2px var(--pin-ring), 0 2px 5px rgb(0 0 0 / .35); }
+.crumbs, .scalebar, .maplegend, .map-ctl button, .map-top input[type=search] { background: color-mix(in srgb, var(--surface) 82%, transparent); -webkit-backdrop-filter: blur(10px) saturate(1.3); backdrop-filter: blur(10px) saturate(1.3); box-shadow: 0 2px 10px rgb(0 0 0 / .22); }
+.map-top input[type=search] { border-radius: 999px; padding: 8px 14px; width: 220px; }
+.crumbs { border-radius: 999px; padding: 3px 6px; }
+.maplegend { border-radius: 999px; padding: 6px 14px; gap: 4px 16px; }
+.map-ctl button { width: 40px; height: 40px; transition: transform .12s, background .12s; }
+.map-ctl button:hover { transform: scale(1.06); }
+#mp-fs .fs-out, .mapwrap.is-fs #mp-fs .fs-in { display: none; } .mapwrap.is-fs #mp-fs .fs-out { display: block; }
+.mapwrap:fullscreen, .mapwrap.pseudo-fs { height: 100vh; height: 100dvh; width: 100vw; max-width: none; border-radius: 0; border: 0; }
+.mapwrap:-webkit-full-screen { height: 100vh; width: 100vw; max-width: none; border-radius: 0; border: 0; }
+.mapwrap.pseudo-fs { position: fixed; inset: 0; z-index: 9999; }
+.mapwrap.is-fs .map-top { top: 16px; left: 16px; } .mapwrap.is-fs .map-ctl { top: 16px; right: 16px; } .mapwrap.is-fs .map-foot { left: 16px; right: 16px; bottom: 16px; }
+.mapwrap.is-fs .jcard { bottom: 70px; left: 16px; }
 #toast { border-radius: 999px; padding: 12px 22px; font-weight: 500; box-shadow: none; }
 .page-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
 .page-head h1 { font-size: clamp(30px, 3.4vw, 44px); font-weight: 500; letter-spacing: -0.03em; }
@@ -762,6 +792,8 @@ dialog::backdrop { background: rgba(32,33,36,.55); }
           <hr>
           <button id="mp-fit" aria-label="Show the whole journey" title="Whole journey">⤢</button>
           <button id="mp-world" aria-label="Show the whole world" title="Whole world">◍</button>
+          <hr>
+          <button id="mp-fs" aria-label="Full screen" title="Full screen"><svg class="fs-in" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><svg class="fs-out" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
         </div>
         <div class="map-foot">
           <div class="scalebar" id="mp-scale"><i></i><span></span></div>
