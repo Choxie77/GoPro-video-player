@@ -3,7 +3,7 @@ const DATA = JSON.parse(document.getElementById("data").textContent) || {summary
 const S = DATA.sprite;
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-const fmtDur = (s) => s == null ? "" : s >= 60 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : `${s.toFixed(1)}s`;
+const fmtDur = (s) => { if (s == null) return ""; if (s < 59.5) return `${s.toFixed(1)}s`; const t = Math.round(s); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
 const fmtDay = (iso) => new Date(iso.slice(0, 10) + "T12:00").toLocaleDateString(undefined, {weekday: "short", day: "numeric", month: "short", year: "numeric"});
 const fmtShort = (iso) => new Date(iso.slice(0, 10) + "T12:00").toLocaleDateString(undefined, {day: "numeric", month: "short"});
 const addDays = (iso, n) => { const d = new Date(iso + "T12:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
@@ -1567,6 +1567,7 @@ function buildMap() {
     const c = g ? path.centroid(g) : [NaN, NaN];
     return {name: f.properties.name, x: c[0], y: c[1], area: g ? path.area(g) : 0, visited: visited.has(f.properties.name)};
   }).filter((d) => isFinite(d.x) && isFinite(d.y));
+  M.tileG = geo.append("g").attr("class", "tiles").attr("display", "none"); M.tileN = -1;
   buildDetail(geo);
   const trG = geo.append("g").attr("display", $("mp-tracks").checked ? null : "none");
   M.tracks = new Map();
@@ -1592,8 +1593,8 @@ function buildMap() {
   M.plG = svg.append("g");
   M.labG = svg.append("g");
   M.items = clips.map((c) => { const [px, py] = proj([c.lon, c.lat]); return {c, px, py}; }).sort((a, b) => prio(b.c) - prio(a.c));
-  const zoom = d3.zoom().scaleExtent([M.minK, Math.max(16384, 256 * 2 ** 17.5 / W)]).translateExtent([[0, yTop], [W, yBot]])
-    .on("zoom", (e) => { if (e.sourceEvent && J.on && J.playing) pauseJourney(); M.t = e.transform; geo.attr("transform", e.transform); placeMarker(); schedule(); });
+  const zoom = d3.zoom().scaleExtent([M.minK, Math.max(16384, 256 * 2 ** 19 / W)]).translateExtent([[0, yTop], [W, yBot]])
+    .on("zoom", (e) => { if (e.sourceEvent) hidePicker(); if (e.sourceEvent && J.on && J.playing) pauseJourney(); M.t = e.transform; geo.attr("transform", e.transform); placeMarker(); schedule(); });
   svg.call(zoom);
   M.svg = svg; M.geo = geo; M.zoom = zoom; M.built = true;
   $("mp-in").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 2);
@@ -1650,6 +1651,7 @@ function drawOverlay() {
   const t = M.t, k = t.k, W = M.W, H = M.H;
   // pins: greedy grouping in screen space, best footage first so it becomes the group's cover
   const CW = 82, CH = 66, cells = new Map(), clusters = [];
+  updateTiles(t);
   updateDetail(t);
   for (const it of M.items) {
     if (J.on && !J.seen.has(it.c.id)) continue;
@@ -1732,7 +1734,37 @@ function showTip(d, el) {
   if (y < 8) y = r.bottom - wr.top + 8;
   tip.style.left = `${Math.max(8, Math.min(M.W - 248, x))}px`; tip.style.top = `${Math.max(8, Math.min(M.H - tip.offsetHeight - 8, y))}px`;
 }
-$("mp-pins").addEventListener("click", (e) => { const el = e.target.closest(".pin"); if (el?.__data__) { $("mp-tip").hidden = true; stopJourney(); selectFromCluster(el.__data__.ms); } });
+$("mp-pins").addEventListener("click", (e) => {
+  const el = e.target.closest(".pin"); if (!el?.__data__) return;
+  const d = el.__data__, ms = d.ms; $("mp-tip").hidden = true; stopJourney();
+  // one clip opens straight away; a handful in one place get a picker; a big spread zooms in as before
+  if (ms.length === 1) { openClip(ms[0].id, M.grid.length ? M.grid : ms); return; }
+  if (ms.length <= 24 && new Set(ms.map((c) => c.cc + "|" + areaOf(c))).size === 1) { showPicker(d, el); return; }
+  hidePicker(); selectFromCluster(ms);
+});
+// the picker: tap a pin, see its clips as thumbnails, tap one to watch it
+function hidePicker() { const b = $("mp-pick"); if (!b.hidden) { b.hidden = true; M.pickList = null; } }
+function showPicker(d, el) {
+  const box = $("mp-pick"), ms = [...d.ms].sort((a, b) => (a.t < b.t ? -1 : 1)), show = ms.slice(0, 12);
+  M.pickList = ms; M.pickPin = d;
+  box.innerHTML = `<div class="pk-h"><b>${esc(d.name)}</b><span>${ms.length} clips · ${fmtMin(mins(ms))} filmed</span><button data-act="close" aria-label="Close">×</button></div>
+    <div class="pk-g">${show.map((c) => `<button class="pk" data-id="${esc(c.id)}" aria-label="${esc(fmtShort(c.t))} ${esc(c.t.slice(11, 16))}, ${esc(fmtDur(c.dur))}"><span class="ph" style="${thumbStyle(c, coverFrame(c))}"></span><span class="t">${esc(fmtShort(c.t))} · ${esc(c.t.slice(11, 16))}</span><i>${esc(fmtDur(c.dur))}</i></button>`).join("")}</div>
+    <div class="pk-f">${ms.length > show.length ? `<span>+${ms.length - show.length} more in the list</span>` : ""}<button data-act="zoom">Zoom in here</button></div>`;
+  box.hidden = false;
+  const wr = $("mp-wrap").getBoundingClientRect(), r = el.getBoundingClientRect();
+  let x = r.left - wr.left + r.width / 2 - box.offsetWidth / 2, y = r.top - wr.top - box.offsetHeight - 10;
+  if (y < 8) y = r.bottom - wr.top + 10;
+  box.style.left = `${Math.max(8, Math.min(M.W - box.offsetWidth - 8, x))}px`; box.style.top = `${Math.max(8, Math.min(M.H - box.offsetHeight - 8, y))}px`;
+  box.querySelector(".pk")?.focus({preventScroll: true});
+}
+$("mp-pick").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.id) { const list = M.pickList; hidePicker(); openClip(b.dataset.id, list); }
+  else if (b.dataset.act === "zoom") { const ms = M.pickList; hidePicker(); selectFromCluster(ms); }
+  else hidePicker();
+});
+$("mp-pick").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); hidePicker(); } });
+$("mp-svg").addEventListener("pointerdown", () => hidePicker());
 $("mp-pins").addEventListener("mouseover", (e) => { const el = e.target.closest(".pin"); if (el?.__data__) { showTip(el.__data__, el); setHot(el.__data__.ms.map((c) => c.id)); } });
 $("mp-pins").addEventListener("mouseout", (e) => { const el = e.target.closest(".pin"); if (el && !el.contains(e.relatedTarget)) { $("mp-tip").hidden = true; setHot([]); } });
 // let the wheel zoom the map even when the pointer is over a pin
@@ -2035,6 +2067,31 @@ function buildDetail(geo) {
   if (!M.cityPts) M.cityPts = MAPX.cities.map((c) => ({n: c[0], lon: c[1], lat: c[2], z: c[3], cap: c[4]}));
   for (const c of M.cityPts) [c.px, c.py] = M.proj([c.lon, c.lat]);
   M.dtLabels = MAPX.regions.map((r) => r.labels.map((l) => { const [px, py] = M.proj([l[1], l[2]]); return {n: l[0], px, py, kind: l[3], z: l[4], a: l[5]}; }));
+}
+// Street-level basemap: once you zoom in past what the bundled outlines can show, real OpenStreetMap tiles fade in underneath so every pin sits on a recognisable street, river or district.
+const TILE_FROM = 6.5;
+const darkNow = () => { const th = document.documentElement.dataset.theme; return th === "dark" || (th !== "light" && matchMedia("(prefers-color-scheme: dark)").matches); };
+function updateTiles(t) {
+  if (!M.tileG) return;
+  const host = $("mp-svg"), z = zOf(t.k), W = M.W, H = M.H, on = z >= TILE_FROM;
+  host.classList.toggle("tiles-on", on); host.classList.toggle("z-far", z < 7);
+  const at = $("mp-attr"); if (at) at.hidden = !on;
+  M.tileG.attr("display", on ? null : "none");
+  if (!on) return;
+  const hi = (window.devicePixelRatio || 1) > 1, n = Math.min(19, Math.max(0, Math.round(z + (hi ? 0.7 : 0.3)))), N = 2 ** n, S = W / N, y0 = H / 2 - W / 2;
+  const style = "osm"; host.classList.toggle("tiles-dark", darkNow());
+  const i0 = Math.max(0, Math.floor(t.invertX(0) / S)), i1 = Math.min(N - 1, Math.floor(t.invertX(W) / S));
+  const j0 = Math.max(0, Math.floor((t.invertY(0) - y0) / S)), j1 = Math.min(N - 1, Math.floor((t.invertY(H) - y0) / S));
+  const want = [];
+  for (let j = j0; j <= j1 && want.length < 96; j++) for (let i = i0; i <= i1 && want.length < 96; i++) want.push({i, j, n, key: `${style}/${n}/${i}/${j}`, url: `https://tile.openstreetmap.org/${n}/${i}/${j}.png`});
+  const have = new Set(M.tileG.selectAll("image").data().map((d) => d.key));
+  const fresh = want.filter((d) => !have.has(d.key));
+  if (fresh.length) M.tileG.selectAll("image.new").data(fresh, (d) => d.key).enter().append("image").attr("class", "tile").datum((d) => d)
+    .attr("href", (d) => d.url).attr("x", (d) => d.i * S).attr("y", (d) => y0 + d.j * S).attr("width", S).attr("height", S).attr("preserveAspectRatio", "none").attr("decoding", "async");
+  // keep the previous zoom level's tiles under the new ones until they have loaded, then drop them (and anything far off screen)
+  if (M.tileN !== n) { M.tileN = n; clearTimeout(M.tileT); M.tileT = setTimeout(() => M.tileG.selectAll("image").filter((d) => d.n !== M.tileN).remove(), 900); }
+  const keep = new Set(want.map((d) => d.key));
+  M.tileG.selectAll("image").filter((d) => d.n === n && !keep.has(d.key)).remove();
 }
 function updateDetail(t) {
   const z = zOf(t.k), W = M.W, H = M.H;
