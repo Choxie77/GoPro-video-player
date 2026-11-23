@@ -1029,7 +1029,7 @@ function drawEdit() {
         ${thinking}<p class="muted small" id="ed-msg">${esc(window.__requestNote?.(p.id) || "")}</p>
       </div>
       <details class="ed-shots" ${studio.shotsOpen ? "open" : ""}><summary>Shot list · fine-tune it yourself (${e.shots.length})</summary><div class="plist" id="ed-shots">${shotsHTML}</div></details>
-      <div class="ed-approve">${approved
+      <div class="ed-approve">${approved ? (window.__gtaReview?.button(p.id, cur.v) || "") : ""}${approved
         ? (p.renderUrl ? `<div style="display:grid;gap:6px"><span class="label">Final render of v${cur.v}</span>${renderEmbed(p)}<div class="row">${p.status === "cut" ? `<button class="btn" data-st-go="scheduled">Looks good: schedule it</button>` : ""}<a class="btn ghost" href="${esc(p.renderUrl)}" target="_blank" rel="noopener">Open the file</a></div></div>`
           : `<p><b>v${cur.v} is approved.</b> The final ${esc((ASPECT[e.aspect || "9:16"] || ASPECT["9:16"]).join("×"))} render is made for free in Colab from your original files. Tell Claude Code <b>“render the approved posts”</b>: it queues the edit, and the next Colab run (any pass, or PASS = 4 for renders only) makes it. The cut then plays here.</p>`)
         : `<button class="btn" id="ed-approve" ${busy ? "disabled" : ""}>Approve v${cur.v} for the final render</button><span class="muted small">You can keep revising after; approving just picks the version to render.</span>`}</div>`;

@@ -193,6 +193,12 @@
   });
   const db = {doc: docRef, collection: colRef};
   window.claude = {use: async (name) => name === "db" ? db : null};
+  // What review.js needs from this file: saved work, Drive lookups and a fresh stream address.
+  window.__gtaBridge = {
+    db, find,
+    token: async () => { if (!TEST && Date.now() > expires) await requestToken("").catch(() => {}); return token; },
+    streamUrl: (id) => `stream/${id}?t=${encodeURIComponent(token)}${TEST ? `&api=${encodeURIComponent(TEST + "/")}` : ""}`,
+  };
 
   async function openState() {
     const found = await find(`name='${STATE_NAME}'`, "files(id,name,version,modifiedTime)");
