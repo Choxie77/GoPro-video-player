@@ -68,7 +68,7 @@
   async function requestToken(prompt) {
     if (TEST) return token;
     if (tokenWait) return tokenWait;
-    await loadGoogle();
+    if (!window.google?.accounts?.oauth2) await loadGoogle(); /* awaiting here would lose the click and the browser would block the popup */
     tokenWait = new Promise((ok, bad) => {
       tokenClient = tokenClient || google.accounts.oauth2.initTokenClient({client_id: CLIENT_ID, scope: SCOPE, callback: () => {}});
       tokenClient.callback = (r) => {
@@ -334,6 +334,7 @@
       gateBtn.textContent = "Try again";
     }
   }
+  loadGoogle().catch(() => {}); /* load Google's script before the first click so the popup opens straight from the click */
   gateBtn.onclick = async () => {
     try { await requestToken(token || wasSignedIn() ? "" : "consent"); start(); }
     catch (e) { gateSay("Sign-in didn't finish", e?.message || "Try again.", true); }
