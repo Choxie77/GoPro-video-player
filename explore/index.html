@@ -8,6 +8,9 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>Explore the Journey</title>
+<link rel="preconnect" href="https://www.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://accounts.google.com">
+<link rel="preload" href="countries.json" as="fetch" crossorigin>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{--bg:#f4f2ec;--panel:#fff;--ink:#1c1a16;--mute:#6f6a5f;--line:#e3dfd3;--accent:#d2561f;--sea:#e8edf0;--land:#cfc9b8;--visit:#e7a27a}
@@ -100,9 +103,12 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-
 
 <section id="welcome" hidden>
   <h1>A year of travel, searchable</h1>
-  <p>Search every clip by place, date, time of day and what was said, watch the route unfold on the globe, then play any moment. This is invite-only: sign in with the Google account the folder was shared with.</p>
+  <p>Search every clip by place, date, time of day and what was said, watch the route unfold on the globe, then play any moment. This is a private link: sign in with the Google account I shared the trip with.</p>
   <p><button class="btn pri" id="signin2">Sign in with Google</button></p>
   <p style="font-size:13px">Read-only. Nothing is stored or changed in your Drive.</p>
+  <p id="signmsg" role="alert" hidden style="font-size:14px;color:var(--text,#eee);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;text-align:left"></p>
+  <details style="font-size:13px;color:var(--mute);text-align:left;margin-top:18px"><summary style="cursor:pointer">Trouble signing in?</summary>
+    <p>Use the same Google (Gmail) account I sent the invite to. If Google says the app isn't verified, choose <b>Advanced</b>, then <b>Go to the app</b>. If it says access is blocked, send me your Gmail address so I can add you. On a phone, allow pop-ups for this page if nothing opens.</p></details>
 </section>
 
 <main id="app" hidden>
@@ -172,20 +178,24 @@ function initGoogle(){
   if(TEST_API||tokenClient)return true;
   if(!window.google?.accounts?.oauth2)return false;
   tokenClient=google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID,scope:SCOPE,callback:r=>{
-    if(r.error)return;token=r.access_token;tokenExpires=Date.now()+(r.expires_in-60)*1000;saveToken();start();
+    if(r.error){signMsg(r.error==="access_denied"?"Google blocked that sign-in. Make sure you chose the Gmail address I invited, and that you allowed read-only access to Drive. If it still fails, send me your Gmail address so I can add you.":"Sign-in didn't finish ("+r.error+"). Please try again.");return}
+    token=r.access_token;tokenExpires=Date.now()+(r.expires_in-60)*1000;saveToken();start();
   }});return true;
 }
+function signMsg(m){const e=$("signmsg");if(e){e.textContent=m;e.hidden=false}else toast(m)}
 let signTries=0;
 function signIn(){
-  if(!initGoogle()){if(++signTries>25){toast("Google sign-in didn't load. Check your connection or an ad blocker, then reload.");signTries=0;return}return setTimeout(signIn,300)}
-  signTries=0;tokenClient.requestAccessToken({prompt:""});
+  if($("signmsg"))$("signmsg").hidden=true;
+  if(!initGoogle()){if(++signTries>25){signMsg("Google sign-in didn't load. Check your connection or an ad blocker, then reload.");signTries=0;return}return setTimeout(signIn,300)}
+  signTries=0;
+  try{tokenClient.requestAccessToken({prompt:""})}catch(e){signMsg("Couldn't open the Google sign-in window. Allow pop-ups for this page and try again.")}
 }
 $("signin").onclick=$("signin2").onclick=signIn;
 async function api(path,params={},blob){
   const base=path?API+path:API.replace(/\/$/,"");
   const r=await fetch(base+"?"+new URLSearchParams({supportsAllDrives:"true",...params}),{headers:{Authorization:`Bearer ${token}`}});
   if(r.status===401){sessionStorage.removeItem("gtp-token");token=null;$("app").hidden=true;$("welcome").hidden=false;$("signin").hidden=false;throw new Error("401")}
-  if(!r.ok)throw new Error(r.status);return blob?r.blob():r.json();
+  if(!r.ok)throw new Error(r.status);return blob==="text"?r.text():blob?r.blob():r.json();
 }
 function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;document.body.append(t);setTimeout(()=>t.remove(),2200)}
 
@@ -195,8 +205,10 @@ const REGION_LABEL={"Ha Noi":"Hanoi","Chongqing Shi":"Chongqing"};
 const COUNTRY_NAME={"Viet Nam":"Vietnam"};
 const PALETTE=["#e8743b","#3aa6b9","#c9a227","#7a6bd0","#4fa36b","#d0517a","#8a8f98"];
 const norm=s=>String(s||"").toLowerCase().replace(/[\s\-]+/g," ").trim();
-const fmtDate=iso=>new Date(iso.slice(0,10)+"T12:00").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
-const fmtDay=iso=>new Date(iso.slice(0,10)+"T12:00").toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
+const memo=(fn,m=new Map())=>k=>{let v=m.get(k);if(v===undefined){v=fn(k);m.set(k,v)}return v};
+const DF1=new Intl.DateTimeFormat("en-GB",{day:"numeric",month:"short",year:"numeric"}),DF2=new Intl.DateTimeFormat("en-GB",{weekday:"long",day:"numeric",month:"long"});
+const fmtDate=iso=>fmtDate0(iso.slice(0,10)),fmtDate0=memo(d=>DF1.format(new Date(d+"T12:00")));
+const fmtDay=iso=>fmtDay0(iso.slice(0,10)),fmtDay0=memo(d=>DF2.format(new Date(d+"T12:00")));
 const fmtDur=s=>{const m=Math.floor(s/60);return m+":"+String(Math.floor(s%60)).padStart(2,"0")};
 let METRO=new Set();
 function placeLabel(city,region){
@@ -204,18 +216,41 @@ function placeLabel(city,region){
   if(region&&METRO.has(region))return REGION_LABEL[region]||region;   // a big city's districts all read as the city
   return city||region||"Unknown place";
 }
-async function loadIndex(){
-  let f=null;
+/* Speed: the index and the thumbnail sheets are kept in this browser's Cache Storage, keyed by Drive id + modified time,
+   so a second visit shows the trip at once and only checks Drive for a newer index in the background. */
+const CACHE="gtx-cache-v1";
+async function cget(k){try{const c=await caches.open(CACHE),r=await c.match("/_gtx/"+encodeURIComponent(k));return r||null}catch(e){return null}}
+async function cput(k,body,type){try{const c=await caches.open(CACHE);await c.put("/_gtx/"+encodeURIComponent(k),new Response(body,{headers:{"Content-Type":type}}))}catch(e){}}
+async function cprune(keep){try{const c=await caches.open(CACHE);for(const r of await c.keys()){const k=decodeURIComponent(new URL(r.url).pathname.slice(6));if(!keep.has(k))c.delete(r)}}catch(e){}}
+const idxKey=f=>`idx:${f.id}:${f.modifiedTime||""}`;
+async function findIndex(){
   for(const name of ["explore_index.json","player_index.json"]){
     const found=await api("",{q:`name='${name}' and trashed=false`,fields:"files(id,parents,modifiedTime)",orderBy:"modifiedTime desc",pageSize:"5"});
-    if(found.files?.[0]){f=found.files[0];break}
+    if(found.files?.[0])return found.files[0];
   }
-  if(!f)throw new Error("The library index was not found. Ask Adam to share the folder with you.");
-  INDEX=await api(f.id,{alt:"media"});
-  const parent=f.parents?.[0];
-  if(parent){const l=await api("",{q:`'${parent}' in parents and name contains 'gtl-sprite-' and trashed=false`,fields:"files(id,name)",pageSize:"1000"});for(const s of l.files||[])SPR.set(s.name,s.id)}
-  prep();
+  throw new Error("The library index was not found. Ask Adam to share the folder with you.");
 }
+async function listSheets(parent){
+  if(!parent)return [];
+  const l=await api("",{q:`'${parent}' in parents and name contains 'gtl-' and trashed=false`,fields:"files(id,name,modifiedTime)",pageSize:"1000"});
+  return (l.files||[]).filter(s=>/^gtl-(sprite|cover)-/.test(s.name)).map(s=>[s.name,s.id+":"+(s.modifiedTime||"")]);
+}
+async function fetchIndex(f){
+  const [data,sheets]=await Promise.all([api(f.id,{alt:"media"},"text"),listSheets(f.parents?.[0])]);
+  cput(idxKey(f),data,"application/json");store.set("gtx-last",{key:idxKey(f),sheets});
+  return{data:JSON.parse(data),sheets};
+}
+function useIndex(data,sheets){INDEX=data;SPR=new Map(sheets);prep();FIX.clear();vocab.v=null}
+async function loadIndex(){
+  const last=store.get("gtx-last",null),hit=last&&await cget(last.key);
+  if(hit){   // show the saved copy now; swap in a newer one if Drive has it
+    try{useIndex(await hit.json(),last.sheets);
+      findIndex().then(async f=>{if(idxKey(f)===last.key)return;const n=await fetchIndex(f);useIndex(n.data,n.sheets);sprUrls.clear();tourDone=false;buildDays();render();keepCache()}).catch(()=>{});
+      return}catch(e){}
+  }
+  const f=await findIndex(),n=await fetchIndex(f);useIndex(n.data,n.sheets);keepCache();
+}
+function keepCache(){const l=store.get("gtx-last",null);if(l)cprune(new Set([l.key,...l.sheets.map(s=>"img:"+s[1])]))}
 function prep(){
   const per=new Map();for(const c of INDEX.clips){if(c.region&&c.city){if(!per.has(c.region))per.set(c.region,new Set());per.get(c.region).add(norm(c.city))}}
   METRO=new Set(["Bangkok","Ho Chi Minh City","Da Nang","Ha Noi","Tokyo","Chongqing Shi"].filter(r=>per.has(r)));
@@ -258,19 +293,30 @@ function parse(q){
   }return f;
 }
 function vocab(){if(!vocab.v){const s=new Set();CL.forEach(c=>(c.o.hay+" "+c.o.tx).split(" ").forEach(x=>x.length>3&&s.add(x)));vocab.v=[...s]}return vocab.v}
-function lev(a,b){const d=[];for(let i=0;i<=a.length;i++){d[i]=[i];}for(let j=1;j<=b.length;j++)d[0][j]=j;
-  for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length]}
-function run(ignore){
+function lev(a,b,max){   // edit distance, giving up as soon as it can't be <= max
+  let prev=Array.from({length:b.length+1},(_,j)=>j),cur=new Array(b.length+1);
+  for(let i=1;i<=a.length;i++){cur[0]=i;let lo=i;
+    for(let j=1;j<=b.length;j++){cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));if(cur[j]<lo)lo=cur[j]}
+    if(lo>max)return max+1;[prev,cur]=[cur,prev]}
+  return prev[b.length];
+}
+const FIX=new Map();   // word -> corrected word (or itself), so typing doesn't redo the typo search on every key
+function fixWord(v){
+  if(FIX.has(v))return FIX.get(v);
+  let out=v;
+  if(!CL.some(c=>c.o.hay.includes(v)||c.o.tx.includes(v))){let best=null;
+    for(const w of vocab()){if(Math.abs(w.length-v.length)>2)continue;const d=lev(v,w,best?best[0]:2);if(d<=2&&(!best||d<best[0])){best=[d,w];if(d===1)break}}
+    if(best)out=best[1]}
+  FIX.set(v,out);return out;
+}
+/* One pass gives the results plus what the country chips (all countries) and date strip (all dates) need. */
+function run(){
   let f=parse(S.q);const notes=[];
   f=f.map(x=>{if(x.k!=="txt"||x.v.length<4||/^\d/.test(x.v))return x;
-    if(CL.some(c=>c.o.hay.includes(x.v)||c.o.tx.includes(x.v)))return x;
-    let best=null;for(const w of vocab()){const d=lev(x.v,w);if(d<=2&&(!best||d<best[0]))best=[d,w]}
-    if(best){notes.push(`No match for "${x.v}", showing "${best[1]}".`);return{k:"txt",v:best[1]}}return x});
-  const res=[];
+    const w=fixWord(x.v);if(w!==x.v){notes.push(`No match for "${x.v}", showing "${w}".`);return{k:"txt",v:w}}return x});
+  const res=[],anyCountry=[],anyDate=new Set();
   for(const c of CL){
-    if(ignore!=="range"&&S.range&&(c.o.date<S.range[0]||c.o.date>S.range[1]))continue;
-    if(ignore!=="place"&&S.place&&c.o.label!==S.place)continue;
-    if(ignore!=="country"&&S.country&&c.country!==S.country)continue;
+    if(S.place&&c.o.label!==S.place)continue;
     if(S.cell&&c.o.cell!==S.cell)continue;
     if(S.picks&&c.pick<2)continue;
     if(S.hearts&&!HEART[c.id])continue;
@@ -283,10 +329,15 @@ function run(ignore){
       else if(c.o.tx.includes(x.v))sc+=2;
       else{ok=false;break}
     }
-    if(ok)res.push([sc+(c.hl||0)*2+c.pick*2,c]);
+    if(!ok)continue;
+    const inRange=!S.range||(c.o.date>=S.range[0]&&c.o.date<=S.range[1]),inCountry=!S.country||c.country===S.country;
+    if(inRange)anyCountry.push(c);
+    if(inCountry)anyDate.add(c.o.date);
+    if(inRange&&inCountry)res.push([sc+(c.hl||0)*2+c.pick*2,c]);
   }
-  return{res,notes,f};
+  return{res,notes,f,anyCountry,anyDate};
 }
+let LAST=null;
 function snippet(c,f){
   const toks=f.filter(x=>x.k==="txt").map(x=>x.v);if(!toks.length||!c.o.sx.length)return null;
   const line=c.o.sx.find(s=>toks.every(t=>s.n.includes(t)))||c.o.sx.find(s=>toks.some(t=>s.n.includes(t)));
@@ -310,7 +361,7 @@ function cardHTML(c,i,f){
   return `<div class="card" role="button" tabindex="0" data-i="${i}" data-id="${c.id}"><div class="th" data-id="${c.id}"><span class="du">${fmtDur(c.dur)}</span>${c.pick>=2?'<span class="star">★ Adam\'s pick</span>':""}<span class="ic"><button type="button" data-act="heart" class="${hh?"on":""}" aria-label="${hh?"Remove heart":"Heart this clip"}" title="Heart">${hh?"♥":"♡"}</button><button type="button" data-act="share" aria-label="Copy a link to this clip" title="Copy link">⤴</button></span></div><div class="tx"><b>${esc(c.o.label)}</b><span>${fmtDate(c.t)} · ${c.t.slice(11,16)} · Day ${c.day??"–"}</span>${sn?`<em class="snip">“${sn.html}” <small>${fmtDur(sn.a)}</small></em>`:""}</div></div>`;
 }
 function render(){
-  const out=run();LASTF=out.f;RES=sortRes(out.res).map(x=>x[1]);
+  const out=run();LAST=out;LASTF=out.f;RES=sortRes(out.res).map(x=>x[1]);MAPDIRTY=GDIRTY=true;CELLS=null;
   $("notes").innerHTML=out.notes.map(n=>`<div class="note">${esc(n)}</div>`).join("");
   const hrs=RES.reduce((s,c)=>s+c.dur,0)/3600;
   $("count").textContent=RES.length?`${RES.length.toLocaleString()} clip${RES.length===1?"":"s"} · ${hrs.toFixed(hrs<10?1:0)} h`:"No clips match";
@@ -318,9 +369,9 @@ function render(){
   const g=$("grid");
   const show=RES.slice(0,S.shown);
   if(S.view==="days"){
-    let html="",cur="";
+    let html="",cur="";const byDate=new Map();for(const x of RES){const a=byDate.get(x.o.date);if(a)a.push(x);else byDate.set(x.o.date,[x])}
     show.forEach((c,i)=>{
-      if(c.o.date!==cur){cur=c.o.date;const day=RES.filter(x=>x.o.date===cur);const mins=Math.round(day.reduce((s,x)=>s+x.dur,0)/60);
+      if(c.o.date!==cur){cur=c.o.date;const day=byDate.get(cur);const mins=Math.round(day.reduce((s,x)=>s+x.dur,0)/60);
         html+=`<div class="dayh" data-d="${cur}"><b>Day ${c.day??"–"}</b><span>${fmtDay(cur)} · ${esc([...new Set(day.map(x=>x.o.label))].join(", "))} · ${day.length} clips, ${mins} min</span></div>`}
       html+=cardHTML(c,i,out.f)});
     g.innerHTML=html;
@@ -333,9 +384,9 @@ function render(){
   renderTour();facets();drawStrip();hash();
 }
 function facets(){
-  const r=run("country").res.map(x=>x[1]),cnt={};r.forEach(c=>cnt[c.country]=(cnt[c.country]||0)+1);
+  const r=LAST.anyCountry,cnt={};r.forEach(c=>cnt[c.country]=(cnt[c.country]||0)+1);
   const list=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
-  const chip=([k,n])=>`<button class="chip" data-c="${esc(k)}" aria-pressed="${S.country===k}"><span class="flag" aria-hidden="true">${flag(k)}</span>${esc(k)}<small>${n}</small></button>`;
+  const chip=([k,n])=>`<button class="chip" data-c="${esc(k)}" aria-pressed="${S.country===k}"><span class="flag" aria-hidden="true">${flag(k)}</span>${esc(COUNTRY_NAME[k]||k)}<small>${n}</small></button>`;
   $("countries").innerHTML=list.map(chip).join("");
   $("cbar").innerHTML=`<button class="chip" data-c="" aria-pressed="${!S.country}"><span class="flag" aria-hidden="true">🌍</span>All countries<small>${r.length}</small></button>`+list.map(chip).join("");
   const cb=$("calb");cb.setAttribute("aria-pressed",!!S.range);cb.textContent=S.range?"📅 "+(S.range[0]===S.range[1]?fmtDate(S.range[0]):fmtDate(S.range[0]).replace(/ \d{4}$/,"")+" to "+fmtDate(S.range[1])):"📅 Dates";
@@ -384,9 +435,10 @@ $("vg").onclick=()=>{S.view="grid";render()};$("vd").onclick=()=>{S.view="days";
 $("fp").onclick=()=>{S.picks=!S.picks;S.shown=60;render()};$("fh").onclick=()=>{S.hearts=!S.hearts;S.shown=60;render()};
 
 /* ---------- Start here tour ---------- */
+let tourDone=false;
 function renderTour(){
   const t=$("tour"),ids=(INDEX.tour||[]).filter(id=>INDEX.byId.has(id));
-  t.hidden=hasFilter()||!ids.length;if(t.hidden)return;
+  t.hidden=hasFilter()||!ids.length;if(t.hidden||tourDone)return;tourDone=true;   // built once; hearts update in place
   const cl=ids.map(id=>INDEX.byId.get(id));
   t.innerHTML=`<h2>Start here</h2><p>${INDEX.tour_auto?"Highlights picked automatically, one per place and week. Adam's own picks will replace these.":"Adam's picks, in the order they happened."}</p>
    <div class="row" id="trow">${cl.map((c,i)=>cardHTML(c,i,null).replace('data-i="'+i+'"','data-t="'+i+'"')).join("")}</div>
@@ -397,20 +449,40 @@ function renderTour(){
 $("tour").onclick=e=>{if(e.target.closest("[data-act]")){cardAct(e);return}const c=e.target.closest(".card");if(!c||c.dataset.t==null)return;openList(INDEX.tour.map(id=>INDEX.byId.get(id)).filter(Boolean),+c.dataset.t)};
 
 /* ---------- thumbnails from the shared sprite sheets ---------- */
-async function sprite(n){
-  if(sprUrls.has(n))return sprUrls.get(n);
-  const p=(async()=>{const id=SPR.get(`gtl-sprite-s${String(n).padStart(3,"0")}.jpg`);if(!id)return null;return URL.createObjectURL(await api(id,{alt:"media"},true))})();
-  sprUrls.set(n,p);return p;
+/* Cards show a frame from the small cover sheets (~100 clips per 0.3 MB file). The big 1.2 MB scrub sheet for a clip
+   is only fetched when someone hovers its card. Both are cached in this browser. */
+function sheetUrl(name){
+  if(sprUrls.has(name))return sprUrls.get(name);
+  const p=(async()=>{const v=SPR.get(name);if(!v)return null;const id=v.split(":")[0],key="img:"+v;
+    let b=await cget(key).then(r=>r&&r.blob()).catch(()=>null);
+    if(!b){b=await api(id,{alt:"media"},true);cput(key,b,"image/jpeg")}
+    return URL.createObjectURL(b)})().catch(()=>{sprUrls.delete(name);return null});
+  sprUrls.set(name,p);return p;
+}
+const sprite=n=>sheetUrl(`gtl-sprite-s${String(n).padStart(3,"0")}.jpg`);
+const pad3=n=>String(n).padStart(3,"0");
+async function paintCover(el){
+  const c=INDEX.byId.get(el.dataset.id),cv=INDEX.cover;
+  if(!c?.cv||!cv||!SPR.has(`gtl-cover-c${pad3(c.cv[0])}.jpg`))return paint(el);
+  const url=await sheetUrl(`gtl-cover-c${pad3(c.cv[0])}.jpg`);if(!url)return paint(el);
+  if(el.dataset.scrub)return;const p=c.cv[1],col=p%cv.cols,row=Math.floor(p/cv.cols);
+  el.style.backgroundImage=`url(${url})`;el.style.backgroundSize=`${cv.cols*100}% ${cv.rows*100}%`;
+  el.style.backgroundPosition=`${cv.cols>1?col/(cv.cols-1)*100:0}% ${cv.rows>1?row/(cv.rows-1)*100:0}%`;
 }
 async function paint(el,k){
-  const c=INDEX.byId.get(el.dataset.id);if(!c?.sp)return;const sp=INDEX.sprite,[sheet,row,n]=c.sp;
+  const c=INDEX.byId.get(el.dataset.id);if(!c?.sp)return;const sp=INDEX.sprite,[sheet,row,n]=c.sp,scrub=k!=null;
   const url=await sprite(sheet);if(!url)return;k=Math.max(0,Math.min(n-1,k??Math.min(1,n-1)));
+  if(scrub)el.dataset.scrub=1;
   el.style.backgroundImage=`url(${url})`;el.style.backgroundSize=`${sp.per_clip*100}% ${sp.per_sheet*100}%`;
   el.style.backgroundPosition=`${sp.per_clip>1?k/(sp.per_clip-1)*100:0}% ${sp.per_sheet>1?row/(sp.per_sheet-1)*100:0}%`;
 }
-const seen=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){seen.unobserve(e.target);paint(e.target)}}),{rootMargin:"300px"});
-document.addEventListener("pointermove",e=>{const t=e.target.closest&&e.target.closest(".card .th");if(!t)return;const r=t.getBoundingClientRect(),c=INDEX.byId.get(t.dataset.id);
-  if(c?.sp)paint(t,Math.floor((e.clientX-r.left)/r.width*c.sp[2]))});
+const seen=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){seen.unobserve(e.target);paintCover(e.target)}}),{rootMargin:"300px"});
+let scrubT=null,scrubEl=null;
+document.addEventListener("pointermove",e=>{if(e.pointerType==="touch")return;const t=e.target.closest&&e.target.closest(".card .th");if(!t||!INDEX)return;const c=INDEX.byId.get(t.dataset.id);if(!c?.sp)return;
+  const k=Math.floor((e.clientX-t.getBoundingClientRect().left)/t.offsetWidth*c.sp[2]);
+  if(sprUrls.has(`gtl-sprite-s${pad3(c.sp[0])}.jpg`)){paint(t,k);return}
+  // wait for a deliberate hover before pulling the big sheet, so sweeping the mouse across the grid downloads nothing
+  if(scrubEl!==t){clearTimeout(scrubT);scrubEl=t;scrubT=setTimeout(()=>{if(scrubEl===t)paint(t,k)},180)}},{passive:true});
 
 /* ---------- opening clips in the player, hearts, links ---------- */
 function openList(clips,i,startSecs){
@@ -420,7 +492,7 @@ function openList(clips,i,startSecs){
 function cardAct(e){
   const b=e.target.closest("[data-act]");if(!b)return false;e.stopPropagation();
   const id=b.closest(".card").dataset.id,c=INDEX.byId.get(id);
-  if(b.dataset.act==="heart"){if(HEART[id])delete HEART[id];else HEART[id]={m:0};store.set("gtx-hearts",HEART);b.classList.toggle("on",!!HEART[id]);b.textContent=HEART[id]?"♥":"♡";pickCount();if(S.hearts)render()}
+  if(b.dataset.act==="heart"){if(HEART[id])delete HEART[id];else HEART[id]={m:0};store.set("gtx-hearts",HEART);document.querySelectorAll(`.card[data-id="${id}"] [data-act="heart"]`).forEach(x=>{x.classList.toggle("on",!!HEART[id]);x.textContent=HEART[id]?"♥":"♡"});pickCount();if(S.hearts)render()}
   else if(b.dataset.act==="share"){const sn=c._sn?`&t=${c._sn.a}`:"";const url=location.origin+location.pathname+`#clip=${id}${sn}`;
     (navigator.clipboard?navigator.clipboard.writeText(url):Promise.reject()).then(()=>toast("Link copied"),()=>prompt("Copy this link",url))}
   return true;
@@ -486,7 +558,8 @@ $("statclose").onclick=()=>$("statd").close();
 $("statsave").onclick=()=>$("statc").toBlob(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="my-trip-stats.png";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)});
 
 /* ---------- search box, shareable state ---------- */
-$("q").oninput=e=>{S.q=e.target.value;S.shown=60;render()};
+let qT=null;
+$("q").oninput=e=>{S.q=e.target.value;S.shown=60;clearTimeout(qT);qT=setTimeout(render,S.q.length>2?90:160)};
 $("sform").onsubmit=e=>e.preventDefault();
 $("clear").onclick=()=>{Object.assign(S,{q:"",country:"",place:"",range:null,cell:"",picks:false,hearts:false,shown:60});$("q").value="";G.sel=null;render()};
 function hash(){try{const h=new URLSearchParams();if(S.q)h.set("q",S.q);if(S.country)h.set("c",S.country);if(S.place)h.set("p",S.place);if(S.range)h.set("r",S.range.join("_"));history.replaceState(null,"",location.pathname+location.search+(h.toString()?"#"+h:""))}catch(e){}}
@@ -511,7 +584,7 @@ function drawStrip(){
   const x=dc.getContext("2d");x.scale(dpr,dpr);x.clearRect(0,0,w,h);
   const t0=Date.parse(DAYS[0].date),t1=Date.parse(DAYS.at(-1).date),span=Math.max(1,(t1-t0)/864e5+1),bw=Math.max(1,w/span);
   const max=Math.max(...DAYS.map(d=>d.secs)),st=getComputedStyle(document.body);
-  const visible=new Set(run("range").res.map(r=>r[1].o.date));
+  const visible=LAST?LAST.anyDate:new Set();
   DAYS.forEach(d=>{const i=(Date.parse(d.date)-t0)/864e5,bh=Math.max(2,d.secs/max*(h-18));
     const ci=(window.COUNTRIES||[]).indexOf(d.country);x.fillStyle=PALETTE[(ci<0?0:ci)%PALETTE.length];x.globalAlpha=visible.has(d.date)?1:.25;
     x.fillRect(i*bw,h-bh-2,Math.max(1,bw-.5),bh)});
@@ -533,18 +606,36 @@ addEventListener("resize",()=>{drawStrip();sizeGlobe()});
 const G={lon:100,lat:12,spin:true,sel:null,play:null,mode:"globe",dayCursor:null};
 const M={lon:105,lat:18,z:3.2};
 const gc=$("gc"),R2=Math.PI/180;let gw=0,rings=null,visited=new Set();
-function sizeGlobe(){const r=gc.getBoundingClientRect(),dpr=devicePixelRatio||1;gw=r.width;gc.width=r.width*dpr;gc.height=r.height*dpr}
+let GDIRTY=true,MAPDIRTY=true,CELLS=null,gOn=true;
+const gdpr=()=>Math.min(2,devicePixelRatio||1);   // 3x phone screens cost 2.25x the pixels for no visible gain
+function sizeGlobe(){const r=gc.getBoundingClientRect(),dpr=gdpr();gw=r.width;gc.width=Math.round(r.width*dpr);gc.height=Math.round(r.height*dpr);GDIRTY=MAPDIRTY=true}
+new IntersectionObserver(es=>{gOn=es[0].isIntersecting;GDIRTY=MAPDIRTY=true}).observe(gc);   // stop drawing while scrolled away
+const TOPO=fetch("countries.json").then(r=>r.json());   // starts downloading while sign-in and the index load
 async function loadTopo(){
-  const t=await (await fetch("countries.json")).json();
+  const t=await TOPO;
   const [sx,sy]=t.transform.scale,[tx,ty]=t.transform.translate;
   const arcs=t.arcs.map(a=>{let x=0,y=0;return a.map(p=>{x+=p[0];y+=p[1];return[x*sx+tx,y*sy+ty]})});
   const ring=ids=>ids.flatMap(i=>i<0?arcs[~i].slice().reverse():arcs[i]);
   rings=[];
   for(const g of t.objects.countries.geometries){
     const polys=g.type==="Polygon"?[g.arcs]:g.type==="MultiPolygon"?g.arcs:[];
-    for(const p of polys)for(const r of p.slice(0,1))rings.push({name:g.properties?.name,pts:ring(r)});
+    for(const p of polys)for(const r of p.slice(0,1)){
+      const pts=ring(r);let lo0=180,lo1=-180,la0=90,la1=-90;for(const [lo,la] of pts){if(lo<lo0)lo0=lo;if(lo>lo1)lo1=lo;if(la<la0)la0=la;if(la>la1)la1=la}
+      // globe copy: fewer points (the globe is a few hundred px wide) stored as unit vectors, plus a bounding cap for culling
+      const g3=[];let pl=1e9,pa=1e9,cx=0,cy=0,cz=0;
+      for(const [lo,la] of pts){if(Math.abs(lo-pl)+Math.abs(la-pa)<.35)continue;pl=lo;pa=la;const l=lo*R2,q=la*R2,c=Math.cos(q);const v=[c*Math.cos(l),c*Math.sin(l),Math.sin(q)];g3.push(...v);cx+=v[0];cy+=v[1];cz+=v[2]}
+      if(g3.length<9)continue;
+      const m=Math.hypot(cx,cy,cz)||1;cx/=m;cy/=m;cz/=m;let rad=0;
+      for(let i=0;i<g3.length;i+=3)rad=Math.max(rad,Math.acos(Math.max(-1,Math.min(1,g3[i]*cx+g3[i+1]*cy+g3[i+2]*cz))));
+      rings.push({name:g.properties?.name,pts,bb:[lo0,lo1,la0,la1],g3:new Float64Array(g3),cen:[cx,cy,cz],rad});
+    }
   }
+  GDIRTY=MAPDIRTY=true;
 }
+/* colours from the CSS theme, read at most twice a second instead of on every frame */
+let COL=null,COLt=0;
+function colors(){const now=performance.now();if(!COL||now-COLt>500){const st=getComputedStyle(document.body),v=n=>st.getPropertyValue(n).trim();
+  COL={sea:v("--sea"),line:v("--line"),visit:v("--visit"),land:v("--land"),accent:v("--accent"),ink:v("--ink"),bg:v("--bg")};COLt=now}return COL}
 function P(lon,lat,R){
   const l=(lon-G.lon)*R2,p=lat*R2,p0=G.lat*R2,cl=Math.cos(p);
   const x=cl*Math.sin(l),y=Math.cos(p0)*Math.sin(p)-Math.sin(p0)*cl*Math.cos(l),z=Math.sin(p0)*Math.sin(p)+Math.cos(p0)*cl*Math.cos(l);
@@ -557,16 +648,20 @@ function slerp(a,b,t){
   const x=k1*A[0]+k2*B[0],y=k1*A[1]+k2*B[1],z=k1*A[2]+k2*B[2];return{lon:Math.atan2(y,x)/R2,lat:Math.atan2(z,Math.hypot(x,y))/R2};
 }
 function drawGlobe(){
-  const dpr=devicePixelRatio||1,x=gc.getContext("2d"),W=gc.width/dpr,R=W*.44,cx=W/2,cy=W/2,st=getComputedStyle(document.body);
-  const css=n=>st.getPropertyValue(n).trim();
+  const dpr=gdpr(),x=gc.getContext("2d"),W=gc.width/dpr,R=W*.44,cx=W/2,cy=W/2,C=colors();
+  const css=n=>C[n.slice(2)];
   x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,W,W);x.translate(cx,cy);
   x.fillStyle=css("--sea");x.beginPath();x.arc(0,0,R,0,7);x.fill();x.strokeStyle=css("--line");x.lineWidth=1;x.stroke();
   if(rings){
+    const sg=Math.sin(G.lon*R2),cg=Math.cos(G.lon*R2),sp0=Math.sin(G.lat*R2),cp0=Math.cos(G.lat*R2),HALF=Math.PI/2;
+    const zOf=(a,b,s)=>sp0*s+cp0*(a*cg+b*sg);
     for(const r of rings){
-      const vis=visited.has(r.name);x.beginPath();let px=1e9,py=1e9,any=false,begun=false;
-      for(const [lo,la] of r.pts){let [X,Y,v]=P(lo,la,R);if(!v){const m=Math.hypot(X,Y)||1;X=X/m*R;Y=Y/m*R}else any=true;
+      const c=r.cen;if(Math.acos(Math.max(-1,Math.min(1,zOf(c[0],c[1],c[2]))))-r.rad>HALF)continue;   // entirely on the far side
+      const p=r.g3;x.beginPath();let px=1e9,py=1e9,any=false,begun=false;
+      for(let i=0;i<p.length;i+=3){const a=p[i],b=p[i+1],s=p[i+2],m=a*cg+b*sg;
+        let X=(b*cg-a*sg)*R,Y=-(cp0*s-sp0*m)*R;if(sp0*s+cp0*m<=0){const k=Math.hypot(X,Y)||1;X=X/k*R;Y=Y/k*R}else any=true;
         if(Math.abs(X-px)+Math.abs(Y-py)<.8)continue;px=X;py=Y;if(begun)x.lineTo(X,Y);else{x.moveTo(X,Y);begun=true}}
-      if(!any)continue;x.closePath();x.fillStyle=vis?css("--visit"):css("--land");x.fill();
+      if(!any)continue;x.closePath();x.fillStyle=visited.has(r.name)?css("--visit"):css("--land");x.fill();
     }
   }
   for(let i=0;i<CH.length-1;i++){
@@ -589,22 +684,30 @@ function drawGlobe(){
 const mx=lon=>lon,my=lat=>{const s=Math.sin(Math.max(-82,Math.min(82,lat))*R2);return .5*Math.log((1+s)/(1-s))/R2};
 function mapXY(lon,lat,W){const k=W/360*Math.pow(2,M.z-1.2);return[W/2+(lon-M.lon)*k,W/2-(my(lat)-my(M.lat))*k]}
 function drawMap(){
-  const dpr=devicePixelRatio||1,x=gc.getContext("2d"),W=gc.width/dpr,st=getComputedStyle(document.body),css=n=>st.getPropertyValue(n).trim();
+  const dpr=gdpr(),x=gc.getContext("2d"),W=gc.width/dpr,C=colors(),css=n=>C[n.slice(2)];
   x.setTransform(dpr,0,0,dpr,0,0);x.fillStyle=css("--sea");x.fillRect(0,0,W,W);
-  if(rings)for(const r of rings){x.beginPath();let px=null,begun=false;
-    for(const [lo,la] of r.pts){const [X,Y]=mapXY(lo,la,W);if(px!==null&&Math.abs(lo-px)>180){begun=false}px=lo;if(begun)x.lineTo(X,Y);else{x.moveTo(X,Y);begun=true}}
+  if(rings)for(const r of rings){
+    const [a0,b0]=mapXY(r.bb[0],r.bb[3],W),[a1,b1]=mapXY(r.bb[1],r.bb[2],W);if(a1<0||b1<0||a0>W||b0>W)continue;   // off screen
+    x.beginPath();let px=null,begun=false,qx=1e9,qy=1e9;
+    for(const [lo,la] of r.pts){const [X,Y]=mapXY(lo,la,W);if(px!==null&&Math.abs(lo-px)>180){begun=false}px=lo;
+      if(begun&&Math.abs(X-qx)+Math.abs(Y-qy)<.7)continue;qx=X;qy=Y;if(begun)x.lineTo(X,Y);else{x.moveTo(X,Y);begun=true}}
     x.fillStyle=visited.has(r.name)?css("--visit"):css("--land");x.fill()}
-  const cells=new Map();for(const r of RES){if(r.lat==null)continue;const k=r.o.cell;let c=cells.get(k);if(!c){c={lat:r.lat,lon:r.lon,n:0,col:PALETTE[Math.max(0,(window.COUNTRIES||[]).indexOf(r.country))%PALETTE.length],key:k};cells.set(k,c)}c.n++}
+  if(!CELLS){CELLS=new Map();for(const r of RES){if(r.lat==null)continue;const k=r.o.cell;let c=CELLS.get(k);if(!c){c={lat:r.lat,lon:r.lon,n:0,col:PALETTE[Math.max(0,(window.COUNTRIES||[]).indexOf(r.country))%PALETTE.length],key:k};CELLS.set(k,c)}c.n++}}
+  const cells=CELLS;
   G.dots=[];for(const c of cells.values()){const [X,Y]=mapXY(c.lon,c.lat,W);if(X<-10||Y<-10||X>W+10||Y>W+10)continue;const r=2.5+Math.sqrt(c.n)*1.6;G.dots.push({X,Y,r,cell:c});
     x.globalAlpha=S.cell&&S.cell!==c.key?.3:.85;x.fillStyle=c.col;x.beginPath();x.arc(X,Y,r,0,7);x.fill();x.lineWidth=S.cell===c.key?3:1;x.strokeStyle=S.cell===c.key?css("--ink"):css("--bg");x.stroke();x.globalAlpha=1}
 }
-function setMode(m){G.mode=m;$("mg").setAttribute("aria-pressed",m==="globe");$("mm").setAttribute("aria-pressed",m==="map");$("play").hidden=m==="map";if(m==="map"&&G.play)stopPlay();if(m==="globe")S.cell="";render()}
+function setMode(m){G.mode=m;GDIRTY=MAPDIRTY=true;$("mg").setAttribute("aria-pressed",m==="globe");$("mm").setAttribute("aria-pressed",m==="map");$("play").hidden=m==="map";if(m==="map"&&G.play)stopPlay();if(m==="globe")S.cell="";render()}
 $("mg").onclick=()=>setMode("globe");$("mm").onclick=()=>{setMode("map");if(S.place){const c=CH.find(x=>x.label===S.place);if(c){M.lon=c.lon;M.lat=c.lat;M.z=6}}};
-function flyTo(lon,lat){if(G.mode==="map"){M.lon=lon;M.lat=lat;M.z=Math.max(M.z,5);return}G.fly={lon,lat};G.spin=false}
+function flyTo(lon,lat){if(G.mode==="map"){MAPDIRTY=true;M.lon=lon;M.lat=lat;M.z=Math.max(M.z,5);return}G.fly={lon,lat};G.spin=false}
 let last=0;
+let lastDraw=0;
 function frame(ts){
   const dt=Math.min(250,ts-last)/1000;last=ts;
-  if(G.mode==="map"){drawMap();return requestAnimationFrame(frame)}
+  if(G.mode==="map"){if(MAPDIRTY&&gOn){MAPDIRTY=false;drawMap()}return requestAnimationFrame(frame)}
+  const busy=G.fly||G.play||G.drag;
+  // only the slow idle spin is left: 30 fps is plenty, and nothing is drawn while the globe is off screen
+  if(!gOn||(!busy&&!GDIRTY&&(!G.spin||ts-lastDraw<32))){if(G.spin&&!busy)G.lon+=dt*6;return requestAnimationFrame(frame)}
   if(G.fly){const dl=((G.fly.lon-G.lon+540)%360)-180;G.lon+=dl*Math.min(1,dt*4);G.lat+=(G.fly.lat-G.lat)*Math.min(1,dt*4);if(Math.abs(dl)<.2&&Math.abs(G.fly.lat-G.lat)<.2)G.fly=null}
   else if(G.spin&&!G.drag&&!G.play)G.lon+=dt*6;
   if(G.play){const p=G.play;p.t+=dt/p.legSecs;while(p.t>=1&&p.leg<CH.length-2){p.t-=1;p.leg++}
@@ -613,16 +716,16 @@ function frame(ts){
       const ms=Date.parse(a.a)+(Date.parse(b.a)-Date.parse(a.a))*Math.min(1,p.t);G.dayCursor=new Date(ms).toISOString().slice(0,10);
       $("nowtxt").textContent=`${p.t<.5?a.label:b.label} · ${fmtDate(G.dayCursor)}`;
       if(ts-(p.lastStrip||0)>120){p.lastStrip=ts;drawStrip()}}}
-  drawGlobe();requestAnimationFrame(frame);
+  GDIRTY=false;lastDraw=ts;drawGlobe();requestAnimationFrame(frame);
 }
 function startPlay(){if(CH.length<2)return;G.spin=false;G.play={leg:0,t:0,legSecs:Math.max(.9,Math.min(2,38/CH.length)),pos:{lon:CH[0].lon,lat:CH[0].lat}};$("play").textContent="Stop"}
-function stopPlay(done){G.play=null;G.dayCursor=null;$("play").textContent="Play the journey";$("nowtxt").textContent=done?"That's the whole route.":"";drawStrip()}
+function stopPlay(done){G.play=null;GDIRTY=true;G.dayCursor=null;$("play").textContent="Play the journey";$("nowtxt").textContent=done?"That's the whole route.":"";drawStrip()}
 $("play").onclick=()=>G.play?stopPlay():startPlay();
 gc.onpointerdown=e=>{gc.setPointerCapture(e.pointerId);G.drag={x:e.clientX,y:e.clientY,moved:false};G.spin=false;G.fly=null;gc.style.cursor="grabbing"};
 gc.onpointermove=e=>{
   const r=gc.getBoundingClientRect();
   if(G.drag){const dx=e.clientX-G.drag.x,dy=e.clientY-G.drag.y;if(Math.abs(dx)+Math.abs(dy)>3)G.drag.moved=true;
-    if(G.mode==="map"){const k=r.width/360*Math.pow(2,M.z-1.2);M.lon-=dx/k;M.lat=Math.max(-70,Math.min(75,M.lat+dy/k*.85))}
+    if(G.mode==="map"){MAPDIRTY=true;const k=r.width/360*Math.pow(2,M.z-1.2);M.lon-=dx/k;M.lat=Math.max(-70,Math.min(75,M.lat+dy/k*.85))}
     else{G.lon-=dx*.4;G.lat=Math.max(-70,Math.min(70,G.lat+dy*.4))}
     G.drag.x=e.clientX;G.drag.y=e.clientY;return}
   const px=e.clientX-r.left,py=e.clientY-r.top;const d=(G.dots||[]).find(d=>Math.hypot(d.X-px,d.Y-py)<=d.r+5);
@@ -633,15 +736,15 @@ gc.onpointerup=e=>{const moved=G.drag?.moved;G.drag=null;gc.style.cursor="grab";
   const r=gc.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,d=(G.dots||[]).find(d=>Math.hypot(d.X-px,d.Y-py)<=d.r+5);
   if(G.mode==="map"){S.cell=d&&S.cell!==d.cell.key?d.cell.key:"";S.shown=60;render();return}
   if(d){S.place=S.place===d.c.label?"":d.c.label;G.sel=S.place||null;S.shown=60;if(S.place)flyTo(d.c.lon,d.c.lat);render()}};
-gc.addEventListener("wheel",e=>{if(G.mode!=="map")return;e.preventDefault();M.z=Math.max(2.2,Math.min(11,M.z-e.deltaY*.002))},{passive:false});
+gc.addEventListener("wheel",e=>{if(G.mode!=="map")return;e.preventDefault();MAPDIRTY=true;M.z=Math.max(2.2,Math.min(11,M.z-e.deltaY*.002))},{passive:false});
 
 /* ---------- boot ---------- */
 async function start(){
   $("welcome").hidden=true;$("signin").hidden=true;$("who").textContent=TEST_API?"Test mode":"Signed in";
-  try{await loadIndex()}catch(e){if(String(e.message)==="401")return;$("app").hidden=false;$("notes").innerHTML=`<div class="note">${esc(e.message==="403"?"This Google account can't read the library.":e.message)}</div>`;return}
-  try{await loadTopo();visited=new Set(CH.map(c=>COUNTRY_NAME[c.country]||c.country))}catch(e){}
+  try{await loadIndex()}catch(e){if(String(e.message)==="401")return;$("app").hidden=false;$("notes").innerHTML=`<div class="note">${esc(e.message==="403"||e.message==="404"?"This Google account doesn't have access to the trip yet. Send me the Gmail address you signed in with and I'll add you, then reload this page.":"Something went wrong loading the trip ("+e.message+"). Reload the page to try again.")}</div>`;return}
+  const topo=loadTopo().then(()=>{visited=new Set(CH.map(c=>COUNTRY_NAME[c.country]||c.country));GDIRTY=MAPDIRTY=true}).catch(()=>{});   // the globe fills in when the map arrives; the clips don't wait for it
   $("app").hidden=false;$("statb").hidden=false;$("pickb").hidden=false;pickCount();
-  if(INDEX.welcome){$("hello").hidden=false;$("hello").textContent=INDEX.welcome}
+  {const o=INDEX.owner||{},w=INDEX.welcome||`Welcome! Here's ${o.trip?"my "+o.trip.charAt(0).toLowerCase()+o.trip.slice(1):"my trip"}. Tap "Start here" for the best bits, or search for a place or a day. Play the journey on the globe to see the route.`;$("hello").hidden=false;$("hello").textContent=w}
   buildDays();hints();const h=readHash();sizeGlobe();
   if(S.place){const c=CH.find(x=>x.label===S.place);if(c)flyTo(c.lon,c.lat)}else{G.lon=100;G.lat=14;G.spin=true}
   render();requestAnimationFrame(frame);
