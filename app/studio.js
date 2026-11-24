@@ -250,6 +250,32 @@
   `;
   document.head.append(css2);
 
+  const css3 = document.createElement("style");
+  css3.textContent = `
+    .ex-stage { display: grid; gap: 10px; justify-items: center; min-width: 0; width: 100%; }
+    .ex-scrub { position: relative; width: 100%; height: 26px; display: flex; align-items: center; cursor: pointer; touch-action: none; border-radius: 6px; }
+    .ex-scrub:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+    .ex-segs { display: flex; gap: 2px; width: 100%; height: 8px; transition: height .12s; }
+    .ex-scrub:hover .ex-segs, .ex-scrub:focus-visible .ex-segs { height: 12px; }
+    .ex-segs b { position: relative; display: block; min-width: 3px; height: 100%; border-radius: 3px; overflow: hidden; background: var(--line); }
+    .ex-segs b i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--ink); opacity: .55; }
+    .ex-segs b.on { outline: 1px solid var(--ink); outline-offset: 1px; }
+    .ex-head { position: absolute; top: 2px; bottom: 2px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--ink); pointer-events: none; }
+    .ex-more { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--surface); }
+    .ex-more summary { cursor: pointer; font-size: 13px; font-weight: 650; }
+    .ex-moreb { display: grid; gap: 10px; margin-top: 10px; }
+    .ex-nudge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+    .sx-btn[aria-pressed=true] { color: var(--surface); background: var(--ink); border-color: var(--ink); }
+    .ex-stage:fullscreen, .ex-stage:-webkit-full-screen { background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; width: 100vw; height: 100vh; }
+    .ex-stage:fullscreen .ex-phone, .ex-stage:-webkit-full-screen .ex-phone { width: auto !important; max-width: 100%; height: calc(100vh - 150px); max-height: none; flex: 0 1 auto; min-height: 0; }
+    .ex-stage:fullscreen .ex-scrub, .ex-stage:-webkit-full-screen .ex-scrub { max-width: min(94vw, 760px); }
+    .ex-stage:fullscreen .ex-segs b { background: #4a4a4a; }
+    .ex-stage:fullscreen .ex-segs b i, .ex-stage:fullscreen .ex-head { background: #fff; }
+    .ex-stage:fullscreen .ex-segs b.on { outline-color: #fff; }
+    .ex-stage:fullscreen .muted { color: #bbb; }
+  `;
+  document.head.append(css3);
+
   const BR = window.__gtaBridge;
   const fileOf = (c) => c?.pv || c?.hd || c?.drive || null;
   // One <video> that can show a moment, loop a range, or play a list of shots in order. The still frame stays underneath while it loads.
@@ -951,7 +977,12 @@
         <button class="sx-btn tiny" id="sx-left" aria-label="Move earlier">←</button><button class="sx-btn tiny" id="sx-right" aria-label="Move later">→</button>
         <button class="sx-btn tiny" id="sx-split" title="Cut in two at the white line (S)">Split</button><button class="sx-btn tiny" id="sx-dup" title="Duplicate (D)">Duplicate</button><button class="sx-btn tiny bad" id="sx-rm">Remove</button>
         <input class="sx-note" id="sx-note" value="${esc(it.note || "")}" placeholder="Note for the edit, e.g. keep the sound" aria-label="Note for the edit"></div>` : ""}
-      <div class="sx-keys"><kbd>Space</kbd> play · <kbd>A</kbd> add · <kbd>I</kbd> <kbd>O</kbd> set start, end · <kbd>,</kbd> <kbd>.</kbd> step · <kbd>S</kbd> split · <kbd>D</kbd> duplicate · <kbd>P</kbd> play all · <kbd>/</kbd> search · <kbd>⌫</kbd> remove · <kbd>⌘Z</kbd> undo · <kbd>⇧⌘Z</kbd> redo</div>`;
+      <details class="ex-more" id="ex-more" ${ex.more ? "open" : ""}><summary>More tools</summary><div class="ex-moreb">
+        <div class="sx-ctl">Edges<div class="sx-acts"><span class="ex-nudge">Start <button class="sx-btn tiny" data-n="in:-0.1" aria-label="Start 0.1 s earlier">−0.1</button><button class="sx-btn tiny" data-n="in:0.1" aria-label="Start 0.1 s later">+0.1</button></span><span class="ex-nudge">End <button class="sx-btn tiny" data-n="out:-0.1" aria-label="End 0.1 s earlier">−0.1</button><button class="sx-btn tiny" data-n="out:0.1" aria-label="End 0.1 s later">+0.1</button></span></div><div class="sx-acts"><button class="sx-btn tiny" id="ex-seti" title="I">Start at playhead</button><button class="sx-btn tiny" id="ex-seto" title="O">End at playhead</button></div></div>
+        <div class="sx-ctl">Fine speed<div class="sx-acts"><input type="range" id="ex-sp" min="0.25" max="3" step="0.05" value="${s.speed || 1}" style="flex:1;min-width:120px" aria-label="Fine speed"><b id="ex-spv" style="font-size:13px;min-width:44px">${(+s.speed || 1).toFixed(2)}×</b></div></div>
+        <div class="sx-ctl">Copy this shot's look to every shot<div class="sx-acts"><button class="sx-btn tiny" id="ex-allsp">Speed</button><button class="sx-btn tiny" id="ex-allx">Framing</button></div></div>
+      </div></details>
+      <div class="sx-keys"><kbd>Space</kbd> play · <kbd>←</kbd> <kbd>→</kbd> shot · <kbd>J</kbd> <kbd>L</kbd> back / forward 1 s · <kbd>F</kbd> fullscreen · <kbd>I</kbd> <kbd>O</kbd> start / end here · <kbd>R</kbd> loop · <kbd>M</kbd> sound · <kbd>,</kbd> <kbd>.</kbd> step · <kbd>S</kbd> split · <kbd>D</kbd> duplicate · <kbd>⌫</kbd> remove · <kbd>⌘Z</kbd> undo</div>`;
     paintStrip();
     const time = (id, key) => { $(id).onkeydown = (e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (e.key === "Escape") e.target.value = fmtT(rangeOf()[key]); e.target.blur(); } }; $(id).onchange = (e) => {
       const t = parseT(e.target.value), now = rangeOf();
@@ -1133,7 +1164,7 @@
     };
   }
   /* ---------- the editor: by hand, instant auto-cut, or with Claude; all make normal versions ---------- */
-  const ex = {key: "", i: 0, t: 0, undo: [], redo: [], saveT: 0, cur: null, deck: null, tr: null, forked: false};
+  const ex = {key: "", i: 0, t: 0, undo: [], redo: [], saveT: 0, cur: null, deck: null, tr: null, forked: false, loop: false, more: false};
   const exSig = () => [draft.id, editsOf(draft.id).map((e) => e.v).join(","), draft.edit, draft.status, waiting(draft)].join("|");
   const shotSpan = (s) => ({c: byId.get(s.clip), a: s.in, b: s.out, speed: s.speed || 1, x: s.x ?? .5});
   function shotsFromMoments(p) { return p.items.map((it, i) => { const r = spanOf(it); return r.c ? {clip: it.clip, in: r2(r.a), out: r2(r.b), speed: 1, x: .5, text: "", why: it.note || "", m: String(i + 1)} : null; }).filter(Boolean); }
@@ -1203,7 +1234,7 @@
     $("ex-text").textContent = s?.text || "";
     const list = ex.cur.edl.shots; let before = 0; for (let i = 0; i < ex.i; i++) before += shotLen(list[i]);
     $("ex-time").textContent = `${fmtT(r2(before + (s ? (t - s.in) / (s.speed || 1) : 0)))} / ${fmtT(r2(edlLen(ex.cur.edl)))}`;
-    ex.tr?.paint();
+    ex.tr?.paint(); paintScrub();
   }
   function exPick(i, keepPlaying) {
     ex.i = i; const s = exShot(); if (!s) return;
@@ -1214,12 +1245,76 @@
   }
   function exPlay() {
     if (ex.deck.playing) return ex.deck.stop();
+    if (ex.loop) { const s = exShot(); if (s && ex.deck.range(byId.get(s.clip), s.in, s.out, clamp(ex.t, s.in, s.out - .05))) return; }
     const l = ex.cur.edl.shots.map(shotSpan);
     if (!ex.deck.playList(l, (i) => { ex.t = l[i].a; exPick(i, true); }, () => { exPick(0); }, ex.i)) toast("Nothing playable yet", true);
   }
   function exSplit() { const s = exShot(); if (!s) return; const t = r2(ex.t); if (t < s.in + .3 || t > s.out - .3) return toast("Move the white line inside the shot first", true); const i = ex.i; mutate((l) => { const o = l[i]; const b = o.out; o.out = t; l.splice(i + 1, 0, {...o, in: t, out: b, text: ""}); ex.i = i + 1; }); }
   function exDup() { const i = ex.i; if (exShot()) mutate((l) => { l.splice(i + 1, 0, {...l[i]}); ex.i = i + 1; }); }
   function exRemove(at) { const i = Number.isInteger(at) ? at : ex.i; if (ex.cur.edl.shots.length <= 1) return toast("A version needs at least one shot", true); ex.deck?.stop(); mutate((l) => { l.splice(i, 1); }); const s = exShot(); if (s) { ex.t = s.in; ex.deck?.seek(byId.get(s.clip), s.in); paintPhone(); } }
+  // Whole-edit navigation: one scrub bar across every shot, fullscreen, and edit-time seeking.
+  const edTotal = () => Math.max(.01, edlLen(ex.cur.edl));
+  function edNow() { const l = ex.cur.edl.shots; let b = 0; for (let i = 0; i < ex.i; i++) b += shotLen(l[i]); const s = l[ex.i]; return b + (s ? (clamp(ex.t, s.in, s.out) - s.in) / (s.speed || 1) : 0); }
+  function drawScrub() {
+    const box = $("ex-segs"); if (!box || !ex.cur) return;
+    box.innerHTML = ex.cur.edl.shots.map((s, i) => `<b data-i="${i}" style="flex:${shotLen(s).toFixed(3)} 1 0" title="Shot ${i + 1} · ${shotLen(s).toFixed(1)} s"><i></i></b>`).join("");
+    paintScrub();
+  }
+  function paintScrub() {
+    const box = $("ex-segs"), head = $("ex-head"); if (!box || !head || !ex.cur) return;
+    const T = edTotal(), now = edNow(), s = exShot();
+    head.style.left = `${clamp(now / T, 0, 1) * 100}%`;
+    const frac = s ? clamp((ex.t - s.in) / Math.max(.01, s.out - s.in), 0, 1) : 0;
+    [...box.children].forEach((b, i) => { b.firstChild.style.width = i < ex.i ? "100%" : i === ex.i ? `${frac * 100}%` : "0"; b.classList.toggle("on", i === ex.i); });
+    $("ex-scrub").setAttribute("aria-valuetext", `${fmtT(r2(now))} of ${fmtT(r2(T))}`);
+  }
+  function exSeekEdit(T) {
+    const l = ex.cur.edl.shots; if (!l.length) return;
+    T = clamp(T, 0, edTotal()); let acc = 0, i = 0;
+    for (; i < l.length - 1; i++) { const d = shotLen(l[i]); if (T < acc + d) break; acc += d; }
+    const s = l[i], t = clamp(r2(s.in + (T - acc) * (s.speed || 1)), s.in, s.out);
+    ex.deck.stop(); if (ex.i !== i) exPick(i, true);
+    ex.t = t; ex.deck.seek(byId.get(s.clip), t); paintPhone();
+  }
+  function bindScrub() {
+    const el = $("ex-scrub"); let drag = false, was = false;
+    const at = (e) => { const r = el.getBoundingClientRect(); return clamp((e.clientX - r.left) / Math.max(1, r.width), 0, 1) * edTotal(); };
+    el.onpointerdown = (e) => { drag = true; was = ex.deck.playing; el.setPointerCapture(e.pointerId); exSeekEdit(at(e)); };
+    el.onpointermove = (e) => { if (drag) exSeekEdit(at(e)); };
+    const up = () => {
+      if (!drag) return; drag = false;
+      if (was) { const i = ex.i, t = ex.t, l = ex.cur.edl.shots.map(shotSpan); ex.deck.playList(l, (k) => { ex.t = l[k].a; exPick(k, true); }, () => exPick(0), i); const v = $("ex-vid"); if (v.readyState >= 1) v.currentTime = t; }
+    };
+    el.onpointerup = up; el.onpointercancel = up;
+    el.onkeydown = (e) => { const d = e.shiftKey ? 5 : 1; if (e.key === "ArrowLeft") { e.preventDefault(); e.stopPropagation(); exSeekEdit(edNow() - d); } else if (e.key === "ArrowRight") { e.preventDefault(); e.stopPropagation(); exSeekEdit(edNow() + d); } };
+  }
+  function exFull() {
+    const st = $("ex-stage"); if (!st) return;
+    const el = document.fullscreenElement || document.webkitFullscreenElement;
+    if (el) return (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    const go = st.requestFullscreen || st.webkitRequestFullscreen;
+    if (!go) return toast("Fullscreen isn't available in this browser", true);
+    Promise.resolve(go.call(st)).catch(() => toast("Fullscreen was blocked. Try the button again", true));
+  }
+  const exSkip = (d) => { const was = ex.deck.playing; exSeekEdit(edNow() + d); if (was) exPlay(); };
+  function exSetEdge(k) {
+    const s = exShot(); if (!s) return; const t = r2(ex.t), i = ex.i;
+    if (k === "in" ? t >= s.out - .3 : t <= s.in + .3) return toast("Move the white line inside the shot first", true);
+    mutate((l) => { l[i][k] = t; }); ex.tr.fit();
+  }
+  function exNudge(k, d) {
+    const s = exShot(); if (!s) return; const dur = byId.get(s.clip)?.dur || 1e9, i = ex.i;
+    const v = r2(clamp(s[k] + d, k === "in" ? 0 : s.in + .3, k === "in" ? s.out - .3 : dur)); if (v === s[k]) return;
+    mutate((l) => { l[i][k] = v; }); ex.tr.fit();
+  }
+  function exFit() {
+    const T = +draft.brief.length || 0, L = edlLen(ex.cur.edl); if (!T) return toast("Set a length in the Brief first", true);
+    if (Math.abs(L - T) < .2) return toast("Already on target");
+    const r = T / L; mutate((l) => { l.forEach((s) => { const d = byId.get(s.clip)?.dur || s.out; s.out = clamp(r2(s.in + (s.out - s.in) * r), r2(s.in + .3), d); }); });
+    toast(`Now ${len(edlLen(ex.cur.edl))} for a ${T} s target`);
+  }
+  function exAll(k) { const v = exShot()?.[k]; if (v == null) return; mutate((l) => { l.forEach((s) => { s[k] = v; }); }); toast(`${k === "speed" ? "Speed" : "Framing"} applied to every shot`); }
+  function exLoop() { ex.loop = !ex.loop; const b = $("ex-loop"); if (b) b.setAttribute("aria-pressed", String(ex.loop)); if (ex.deck.playing) { ex.deck.stop(); exPlay(); } toast(ex.loop ? "Looping this shot" : "Loop off"); }
   function drawExTrack() {
     const tr = $("ex-track"); if (!tr) return;
     drawTrack(tr, ex.cur.edl.shots.map((s) => { const c = byId.get(s.clip); return {c, len: shotLen(s), frame: nearestFrame(c, (s.in + s.out) / 2), badge: s.speed > 1 ? `${s.speed}×` : s.text ? "T" : ""}; }), {
@@ -1227,10 +1322,12 @@
       move: (a, b) => mutate((l) => { const [m] = l.splice(a, 1); l.splice(b, 0, m); ex.i = b; }),
     });
     tr.querySelectorAll(".sx-shot").forEach((n) => n.classList.toggle("on", +n.dataset.i === ex.i));
+    drawScrub();
   }
   function drawExStats() {
-    const n = $("ex-stats"); if (!n) return; const L = edlLen(ex.cur.edl), T = +draft.brief.length || 0;
-    n.innerHTML = `<b>${ex.cur.edl.shots.length} shots · ${len(L)}</b><span class="muted">${T ? (Math.abs(L - T) <= Math.max(1, T * .05) ? `On target (${T} s)` : L > T ? `${len(L - T)} over ${T} s` : `${len(T - L)} under ${T} s`) : ""}</span>${T ? `<div class="sx-meter ${L > T * 1.1 ? "over" : ""}"><i style="width:${Math.min(100, (L / T) * 100)}%"></i></div>` : `<span style="flex:1"></span>`}<button class="sx-btn tiny" id="ex-undo" ${ex.undo.length ? "" : "disabled"} title="Undo (⌘Z)">Undo</button><button class="sx-btn tiny" id="ex-redo" ${ex.redo.length ? "" : "disabled"} title="Redo (⇧⌘Z)">Redo</button>`;
+    const n = $("ex-stats"); if (!n) return; const L = edlLen(ex.cur.edl), T = +draft.brief.length || 0, off = T && Math.abs(L - T) > Math.max(1, T * .05);
+    n.innerHTML = `<b>${ex.cur.edl.shots.length} shots · ${len(L)}</b><span class="muted">${T ? (Math.abs(L - T) <= Math.max(1, T * .05) ? `On target (${T} s)` : L > T ? `${len(L - T)} over ${T} s` : `${len(T - L)} under ${T} s`) : ""}</span>${T ? `<div class="sx-meter ${L > T * 1.1 ? "over" : ""}"><i style="width:${Math.min(100, (L / T) * 100)}%"></i></div>` : `<span style="flex:1"></span>`}${off ? `<button class="sx-btn tiny" id="ex-fit" title="Trim or extend every shot a little so the cut lands on ${T} s">Fit to ${T} s</button>` : ""}<button class="sx-btn tiny" id="ex-undo" ${ex.undo.length ? "" : "disabled"} title="Undo (⌘Z)">Undo</button><button class="sx-btn tiny" id="ex-redo" ${ex.redo.length ? "" : "disabled"} title="Redo (⇧⌘Z)">Redo</button>`;
+    if ($("ex-fit")) $("ex-fit").onclick = exFit;
     $("ex-undo").onclick = () => exHistory(ex.undo, ex.redo, "undo"); $("ex-redo").onclick = () => exHistory(ex.redo, ex.undo, "redo");
   }
   function drawShot() {
@@ -1263,6 +1360,12 @@
     $("ex-txt").onkeydown = (e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); e.stopPropagation(); e.target.blur(); } };
     $("ex-l").onclick = () => { const i = ex.i; mutate((l) => { [l[i - 1], l[i]] = [l[i], l[i - 1]]; ex.i = i - 1; }); };
     $("ex-r").onclick = () => { const i = ex.i; mutate((l) => { [l[i + 1], l[i]] = [l[i], l[i + 1]]; ex.i = i + 1; }); };
+    $("ex-more").ontoggle = (e) => { ex.more = e.target.open; };
+    $("ex-more").onclick = (e) => { const b = e.target.closest("[data-n]"); if (b) { const [k, d] = b.dataset.n.split(":"); exNudge(k, +d); } };
+    $("ex-seti").onclick = () => exSetEdge("in"); $("ex-seto").onclick = () => exSetEdge("out");
+    $("ex-sp").oninput = (e) => { $("ex-spv").textContent = `${(+e.target.value).toFixed(2)}×`; };
+    $("ex-sp").onchange = (e) => setF("speed", +e.target.value);
+    $("ex-allsp").onclick = () => exAll("speed"); $("ex-allx").onclick = () => exAll("x");
     $("ex-split").onclick = exSplit; $("ex-dup").onclick = exDup; $("ex-rm").onclick = () => exRemove();
   }
   function drawEditor(cur) {
@@ -1276,9 +1379,10 @@
     box.className = "ex";
     box.innerHTML = `<div class="ex-main">
         <div class="ex-col">
-          <div class="ex-phone" id="ex-phone" style="aspect-ratio:${w} / ${h};width:min(100%, calc((100dvh - 380px) * ${(w / h).toFixed(4)}));--r:${cropR(cur.edl)};--x:.5"><div class="ci" id="ex-ci"></div><video id="ex-vid" playsinline></video><div class="ex-text" id="ex-text"></div></div>
-          <div class="sx-acts" style="justify-content:center"><button class="sx-btn tiny" id="ex-prev" aria-label="Previous shot">⏮</button><button class="sx-btn main" id="ex-play">▶ Play</button><button class="sx-btn tiny" id="ex-next" aria-label="Next shot">⏭</button><button class="sx-btn tiny" id="ex-snd">Sound on</button></div>
-          <div class="muted small" id="ex-time" style="text-align:center;font-variant-numeric:tabular-nums"></div>
+          <div class="ex-stage" id="ex-stage"><div class="ex-phone" id="ex-phone" style="aspect-ratio:${w} / ${h};width:min(100%, calc((100dvh - 380px) * ${(w / h).toFixed(4)}));--r:${cropR(cur.edl)};--x:.5"><div class="ci" id="ex-ci"></div><video id="ex-vid" playsinline></video><div class="ex-text" id="ex-text"></div></div>
+          <div class="ex-scrub" id="ex-scrub" role="slider" aria-label="Position in the edit. Drag to scrub" tabindex="0"><div class="ex-segs" id="ex-segs"></div><i class="ex-head" id="ex-head"></i></div>
+          <div class="sx-acts" style="justify-content:center;flex-wrap:wrap"><button class="sx-btn tiny" id="ex-prev" aria-label="Previous shot">⏮</button><button class="sx-btn main" id="ex-play">▶ Play</button><button class="sx-btn tiny" id="ex-next" aria-label="Next shot">⏭</button><button class="sx-btn tiny" id="ex-snd">Sound on</button><button class="sx-btn tiny" id="ex-loop" aria-pressed="false" title="Loop this shot (R)">↻ Loop</button><button class="sx-btn tiny" id="ex-fs" title="Fullscreen (F)">⛶ Fullscreen</button></div>
+          <div class="muted small" id="ex-time" style="text-align:center;font-variant-numeric:tabular-nums"></div></div>
         </div>
         <div class="ex-col"><div id="ex-trim"></div><div id="ex-fields" style="display:grid;gap:10px"></div></div>
         <div class="ex-col ex-side" id="ex-side">
@@ -1307,7 +1411,8 @@
       seek: (t, quiet) => { const s = exShot(); if (!s) return; ex.t = t; if (ex.deck.playing && !quiet) ex.deck.stop(); ex.deck.seek(byId.get(s.clip), t); paintPhone(); },
       set: (a, b, final) => { const s = exShot(), d = byId.get(s.clip)?.dur || b; s.in = clamp(r2(a), 0, d - .3); s.out = clamp(r2(b), s.in + .3, d); paintPhone(); if (final) { exSaved(); if (!settle()) { drawExTrack(); drawShot(); drawExStats(); } } },
     });
-    $("ex-play").onclick = exPlay; $("ex-phone").onclick = exPlay;
+    $("ex-play").onclick = exPlay; $("ex-phone").onclick = exPlay; $("ex-phone").ondblclick = exFull;
+    $("ex-fs").onclick = exFull; $("ex-loop").onclick = exLoop; $("ex-loop").setAttribute("aria-pressed", String(ex.loop)); bindScrub();
     $("ex-prev").onclick = () => exPick(Math.max(0, ex.i - 1)); $("ex-next").onclick = () => exPick(Math.min(cur.edl.shots.length - 1, ex.i + 1));
     $("ex-vers").onclick = (e) => { const b = e.target.closest("[data-v]"); if (!b) return; flushEdit(); studio.ver = +b.dataset.v; drawEdit(); drawChrome(); };
     $("ex-auto").onclick = (e) => { const b = e.target.closest("[data-p]"); if (b) { flushEdit(); newVersion(quickShots(draft, b.dataset.p), `Auto re-cut (${b.dataset.p})`); } };
@@ -1327,6 +1432,16 @@
     else if (k === "arrowleft") { e.preventDefault(); exPick(Math.max(0, ex.i - 1)); }
     else if (k === "arrowright") { e.preventDefault(); exPick(Math.min(ex.cur.edl.shots.length - 1, ex.i + 1)); }
     else if ((k === "," || k === "<" || k === "." || k === ">") && s) { e.preventDefault(); ex.deck.stop(); ex.t = clamp(ex.t + (k === "," || k === "<" ? -d : d), 0, byId.get(s.clip)?.dur || ex.t); ex.deck.seek(byId.get(s.clip), ex.t); paintPhone(); }
+    else if (k === "f") { e.preventDefault(); exFull(); }
+    else if (k === "k") { e.preventDefault(); exPlay(); }
+    else if (k === "j") { e.preventDefault(); exSkip(e.shiftKey ? -5 : -1); }
+    else if (k === "l") { e.preventDefault(); exSkip(e.shiftKey ? 5 : 1); }
+    else if (k === "home") { e.preventDefault(); exPick(0); }
+    else if (k === "end") { e.preventDefault(); exPick(ex.cur.edl.shots.length - 1); }
+    else if (k === "i") { e.preventDefault(); exSetEdge("in"); }
+    else if (k === "o") { e.preventDefault(); exSetEdge("out"); }
+    else if (k === "r") { e.preventDefault(); exLoop(); }
+    else if (k === "m") { e.preventDefault(); $("ex-snd")?.click(); }
     else if (k === "s") { e.preventDefault(); exSplit(); }
     else if (k === "d") { e.preventDefault(); exDup(); }
     else if (k === "backspace" || k === "delete") { e.preventDefault(); exRemove(); }
