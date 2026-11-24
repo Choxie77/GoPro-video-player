@@ -287,7 +287,7 @@
     const r = state.docs.requests?.[post];
     if (r?.status !== "waiting") return "";
     const when = new Date(r.at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
-    return `Edit requested at ${when}. Tell Claude Code: edit the requested posts.`;
+    return r.stage === "editing" ? `Claude is editing (since ${when}).` : r.stage === "rendering" ? "Rendering the video." : `Edit requested at ${when}. Waiting for the auto-editor.`;
   };
   window.__requestInfo = (post) => state.docs.requests?.[post] || null;
   window.__requestCancel = async (post) => {
@@ -297,7 +297,7 @@
   };
   window.__requestEdit = async (post, mode, note) => {
     await db.collection("requests").doc(post).set({post, mode, note: note || "", status: "waiting", at: new Date().toISOString()});
-    toast("Edit requested. Tell Claude Code: edit the requested posts");
+    toast("Edit requested. The auto-editor on your Mac picks it up within a minute");
   };
   addEventListener("beforeunload", (e) => { if (pending.length && fileId) { flush(); e.preventDefault(); } });
 
