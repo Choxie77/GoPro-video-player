@@ -1140,6 +1140,10 @@
   /* ---------- edit step ---------- */
   const ORDER = [["", "Claude decides"], ["keep", "Keep my order"], ["free", "Claude may reorder"]];
   const SCOPE = [["", "Claude decides"], ["mine", "Only my moments"], ["add", "May add B-roll"]];
+  /* which Claude cuts this edit and how hard it thinks; "" = automatic (the Mac picks from config/edit_models.json) */
+  const MODEL = [["", "Automatic"], ["haiku", "Haiku · fastest"], ["sonnet", "Sonnet · balanced"], ["opus", "Opus · best"]];
+  const EFFORT = [["", "Automatic"], ["low", "Low"], ["medium", "Medium"], ["high", "High"], ["xhigh", "Extra high"], ["max", "Max"]];
+  const TRACK = [["", "Smart: follow my face when I talk"], ["off", "Off: fixed framing"]];
   const ago = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return Number.isFinite(m) ? (m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`) : ""; };
   // What the material really comes to: a whole clip counts as the best seconds Claude (or "Pick best seconds") would take, not its full length.
   const material = (p) => p.items.reduce((a, it) => { if (it.a != null) return a + itemLen(it); const r = bestRange(byId.get(it.clip)); return a + (r ? r[1] - r[0] : itemLen(it)); }, 0);
@@ -1164,16 +1168,19 @@
     if (b.scope === "add") c.push("You may add B-roll from the same days where it helps.");
     return [ui.reqNote.trim(), c.length ? "Controls: " + c.join(" ") : ""].filter(Boolean).join("\n\n");
   }
-  const flow = (step) => `<ol class="sx-flow" aria-label="How an edit happens">${[["Prepare", "Brief and moments, on this page"], ["Send", "Paste one command into Claude Code"], ["Review", "The edit appears here as a version"]].map(([t, d], i) => `<li class="${i + 1 < step ? "done" : i + 1 === step ? "now" : ""}"><b>${i + 1} · ${t}</b><span>${d}</span></li>`).join("")}</ol>`;
+  const flow = (step) => `<ol class="sx-flow" aria-label="How an edit happens">${[["Prepare", "Brief and moments, on this page"], ["Send", "The auto-editor on your Mac edits and renders it"], ["Review", "The finished video appears here"]].map(([t, d], i) => `<li class="${i + 1 < step ? "done" : i + 1 === step ? "now" : ""}"><b>${i + 1} · ${t}</b><span>${d}</span></li>`).join("")}</ol>`;
   function waitBox(p, big) {
     const info = window.__requestInfo?.(p.id), sent = (info?.note || "").trim();
     const el = document.createElement("div"); el.className = "sx-wait" + (big ? " big" : "");
-    el.innerHTML = `<div style="min-width:0"><b>Waiting for Claude Code.</b> ${big ? "" : "Paste the command there and this version appears here."}
-      ${big ? `<p>Open Claude Code in your project and paste <b>edit the requested posts</b>. It reads this post, makes the edit and saves it. This page updates by itself, no reload needed.</p>` : ""}
+    const STAGE = {editing: ["Claude is editing this post now.", "It picks the order, the seconds and the framing from your brief. Usually 2–4 minutes."], rendering: ["Edit done. Rendering the video now.", "Made from the 4K originals on your Mac. Usually 1 minute per 2 seconds of video."]};
+    const st = STAGE[info?.stage], since = info?.pickedAt ? ` · started ${esc(ago(info.pickedAt))}` : "";
+    el.innerHTML = st ? `<div style="min-width:0"><b>${st[0]}</b>${big ? `<p>${st[1]}${since}. This page updates by itself; you can close it.</p>` : ""}</div>` : `<div style="min-width:0"><b>Waiting for the auto-editor.</b> ${big ? "" : "It starts within a minute when it is running on your Mac."}
+      ${big ? `<p>When the auto-editor is running on your Mac it starts within a minute, edits, renders and puts the finished video here. If nothing happens, open Claude Code and paste <b>edit the requested posts</b>. This page updates by itself, no reload needed.</p>` : ""}
       ${info?.at ? `<p>Requested ${esc(new Date(info.at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}))} · ${esc(ago(info.at))}${info.mode && info.mode !== "first" ? ` · ${esc(info.mode)}` : ""}</p>` : ""}
       ${big && sent ? `<details><summary class="muted small">What you sent</summary><pre>${esc(sent)}</pre></details>` : ""}</div>
       <div class="sx-acts"><button class="sx-btn main" data-w="copy">Copy command</button>${window.__requestCancel ? `<button class="sx-btn" data-w="cancel">Cancel request</button>` : ""}</div>`;
-    q('[data-w="copy"]', el).onclick = () => copy("edit the requested posts", "Copied. Paste it into Claude Code");
+    const cp = q('[data-w="copy"]', el);
+    if (cp) cp.onclick = () => copy("edit the requested posts", "Copied. Paste it into Claude Code");
     const c = q('[data-w="cancel"]', el);
     if (c) c.onclick = async () => { c.disabled = true; await window.__requestCancel(p.id); drawEdit(); drawChrome(); };
     return el;
@@ -1190,12 +1197,20 @@
       return `<li><span class="muted">${i + 1}</span><span>${esc(clipName(c))}${it.role ? ` <span class="muted">· ${esc(ROLES[it.role] || it.role)}</span>` : ""}</span><span>${esc(span)}</span></li>`;
     }).join("") + (p.items.length > 14 ? `<li><span></span><span class="muted">+ ${p.items.length - 14} more</span><span></span></li>` : "");
     const ctl = (k, opts) => `<div class="sx-seg" data-ctl="${k}">${opts.map(([x, n]) => `<button type="button" data-x="${x}" aria-pressed="${String(br[k] ?? "") === x}">${n}</button>`).join("")}</div>`;
+    const failed = window.__requestInfo?.(p.id);
     const left = isWaiting ? `<div id="sx-waitslot"></div>` : `
+      ${failed?.status === "failed" ? `<div class="sx-wait"><div style="min-width:0"><b>The last automatic edit failed.</b><p class="muted small" style="margin:4px 0 0">${esc(failed.error || "No reason given")}</p></div></div>` : ""}
+      <div class="sx-card2"><h3>Do it all for me</h3><p class="muted small" style="margin:0 0 10px">Fills in anything missing (moments, best seconds, name, story), sends it, and the auto-editor on your Mac edits and renders it. The finished video appears here.</p>
+        <div class="sx-acts"><button class="sx-btn main" id="sx-all">✦ Do it all for me</button></div></div>
       <div class="sx-card2"><h3>Before you send</h3>${rd.some((r) => r.s !== "ok") ? `<div class="sx-acts"><button class="sx-btn main" id="sx-prep" title="Picks the moments and their best seconds, names the post and drafts the story. Only fills what is missing.">Make it ready for me</button><span class="muted small">Or fix each item below yourself.</span></div>` : ""}<ul class="sx-ready">${rd.map((r, i) => `<li class="${r.s}"><i>${mark[r.s]}</i><span>${esc(r.t)}</span>${r.a ? `<button class="sx-btn" data-r="${i}">${esc(r.a[0])}</button>` : "<span></span>"}</li>`).join("")}</ul></div>
       <div class="sx-card2"><h3>How much control to give Claude</h3>
         <div class="sx-ctl">Moment order${ctl("order", ORDER)}</div>
         <div class="sx-ctl">Footage${ctl("scope", SCOPE)}</div>
         <label class="sx-ctl">Anything else for this edit <small>Optional. For example: open on the tuk-tuk, end on the sunset.</small><textarea id="sx-reqnote" style="min-height:70px">${esc(ui.reqNote)}</textarea></label></div>
+      <div class="sx-card2"><h3>Claude and framing for this edit</h3>
+        <div class="sx-ctl">Claude model${ctl("model", MODEL)}</div>
+        <div class="sx-ctl">Effort <small>Higher thinks longer: better cuts, slower, more of your plan.</small>${ctl("effort", EFFORT)}</div>
+        <div class="sx-ctl">Face tracking <small>Follows your face while you talk to camera. Holds still when you show something or your face is covered.</small>${ctl("track", TRACK)}</div></div>
       <div class="sx-acts"><button class="sx-btn main" id="sx-send" ${blocked ? "disabled" : ""}>Send edit request</button><span class="muted small">${blocked ? "Fix the items marked ! first." : "Nothing is edited yet: this asks Claude Code to make a version for you to review."}</span></div>`;
     box.innerHTML = `<div class="sx-req">
       <div><h2>${isWaiting ? "Edit requested" : "Make the edit"}</h2><p class="lede">${isWaiting ? "Claude Code reads your brief and moments, then writes the cut. It appears here as a version you can change by hand." : "Every route makes a version you can fine-tune by hand, compare and approve."}</p></div>
@@ -1214,6 +1229,15 @@
     box.querySelectorAll("[data-ctl]").forEach((g) => { g.onclick = (e) => { const b = e.target.closest("[data-x]"); if (!b) return; draft.brief[g.dataset.ctl] = b.dataset.x; g.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b)); queueSave(); }; });
     if ($("sx-reqnote")) $("sx-reqnote").oninput = (e) => { ui.reqNote = e.target.value; };
     if ($("sx-prep")) $("sx-prep").onclick = autoPrepare;
+    if ($("sx-all")) $("sx-all").onclick = async () => {
+      const b = $("sx-all"); b.disabled = true; b.textContent = "Preparing…";
+      if (readiness(draft).some((r) => r.s !== "ok")) autoPrepare();
+      if (readiness(draft).some((r) => r.s === "block")) { b.disabled = false; b.textContent = "✦ Do it all for me"; return toast("Couldn't fill everything in. Fix the items marked ! below", true); }
+      await persist();
+      if (!draft.id) { b.disabled = false; b.textContent = "✦ Do it all for me"; return toast("The post couldn't be saved yet. Try again in a moment", true); }
+      await window.__requestEdit(draft.id, "first", noteText(draft));
+      drawEdit(); drawChrome();
+    };
     if ($("sx-send")) $("sx-send").onclick = async () => {
       const b = $("sx-send"); b.disabled = true;
       await persist();
