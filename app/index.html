@@ -172,6 +172,9 @@ dialog::backdrop { background: rgba(5, 10, 14, .6); }
 .col-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .pcard { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 6px; cursor: pointer; background: var(--bg); text-align: left; }
 .pcard:hover { border-color: var(--accent); }
+.pcard[draggable="true"] { cursor: grab; }
+.pcard.dragging { opacity: .45; }
+.col.drop { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: -2px; }
 .pcard strong { font-family: var(--display); }
 .minis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
 .minis .thumb { border-radius: 3px; }

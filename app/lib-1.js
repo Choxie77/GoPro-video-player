@@ -775,6 +775,26 @@ function daysOf(clipIds, fallback) {
 function postOrder(a, b) { return (a.days?.[0] || "9999").localeCompare(b.days?.[0] || "9999") || (a.created || 0) - (b.created || 0); }
 function postDays(p) { return p.days ? (p.days[0] === p.days[1] ? fmtShort(p.days[0]) : `${fmtShort(p.days[0])}–${fmtShort(p.days[1])}`) : "no dates yet"; }
 $("board").addEventListener("click", (e) => { const b = e.target.closest(".pcard"); if (b) openPost(b.dataset.id); });
+$("board").addEventListener("keydown", (e) => { const b = e.target.closest(".pcard"); if (b && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openPost(b.dataset.id); } });
+// Drag a post card to another column to change its stage.
+{
+  const bd = $("board"); let dragId = null;
+  const clear = () => bd.querySelectorAll(".col.drop").forEach((c) => c.classList.remove("drop"));
+  bd.addEventListener("dragstart", (e) => { const b = e.target.closest(".pcard"); if (!b) return; dragId = b.dataset.id; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragId); requestAnimationFrame(() => b.classList.add("dragging")); });
+  bd.addEventListener("dragend", () => { dragId = null; clear(); bd.querySelectorAll(".dragging").forEach((c) => c.classList.remove("dragging")); });
+  bd.addEventListener("dragover", (e) => { const c = e.target.closest(".col"); if (!dragId || !c) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (!c.classList.contains("drop")) { clear(); c.classList.add("drop"); } });
+  bd.addEventListener("drop", async (e) => {
+    const c = e.target.closest(".col"); if (!dragId || !c) return; e.preventDefault(); clear();
+    const id = dragId; dragId = null;
+    const col = BOARD.find(([n]) => n === c.querySelector("h3")?.textContent), p = store.posts.get(id);
+    if (!col || !p || col[1].includes(p.status || "idea")) return;
+    if (!canSave()) return toast("Sign in to move posts", true);
+    const {id: _i, ...body} = p;
+    body.status = col[1][0] === "idea" ? ((postItems(p).length) ? "clips" : "idea") : col[1][0];
+    if (body.status === "posted" && !body.postedAt) body.postedAt = new Date().toISOString().slice(0, 10);
+    await savePost(id, body, true); toast(`Moved to ${col[0]}`); renderBoard();
+  });
+}
 $("newpost").addEventListener("click", () => openPost(null, {}));
 
 let draft = null;
@@ -1275,13 +1295,13 @@ function renderBoard() {
   $("newpost").disabled = !canSave();
   $("board").innerHTML = BOARD.map(([name, sts]) => {
     const ps = posts.filter((p) => sts.includes(p.status || "idea"));
-    return `<div class="col"><div class="col-head"><h3>${name}</h3><span class="muted mono">${ps.length}</span></div>
+    return `<div class="col" data-col="${esc(sts[0])}"><div class="col-head"><h3>${name}</h3><span class="muted mono">${ps.length}</span></div>
       ${ps.map((p) => { const items = postItems(p), v = editsOf(p.id), e = (v.find((x) => x.v === p.edit) || v.at(-1))?.edl, first = e?.shots?.[0] || (items[0] && {clip: items[0].clip, in: items[0].a ?? 0, out: items[0].b ?? 1, x: 0.5});
         const c = first && byId.get(first.clip);
-        return `<button class="pcard" data-id="${esc(p.id)}"><span class="crop cover" style="--r:${cropR(e || {aspect: p.brief?.aspect})};--x:${first?.x ?? 0.5}"><span class="ci" style="${c ? thumbStyle(c, nearestFrame(c, ((first.in || 0) + (first.out || 0)) / 2)) : ""}"></span></span>
+        return `<div class="pcard" role="button" tabindex="0" draggable="true" data-id="${esc(p.id)}"><span class="crop cover" style="--r:${cropR(e || {aspect: p.brief?.aspect})};--x:${first?.x ?? 0.5}"><span class="ci" style="${c ? thumbStyle(c, nearestFrame(c, ((first.in || 0) + (first.out || 0)) / 2)) : ""}"></span></span>
           <span style="display:grid;gap:3px;min-width:0"><strong>${esc(p.title || "Untitled")}</strong>
           <span class="muted" style="font-size:12px">${KINDS[p.kind] || "Reel"} · ${esc(postDays(p))} · ${e ? `${edlLen(e).toFixed(0)} s cut · v${v.length}` : `${items.length} moments`}</span>
-          <span class="nextstep">${esc(nextStep(p))}</span></span></button>`; }).join("") || `<p class="muted" style="font-size:13px">${name === "Building" ? "Plan posts from the Roadmap, or add a clip's moments to a new post." : "None yet."}</p>`}
+          <span class="nextstep">${esc(nextStep(p))}</span></span></div>`; }).join("") || `<p class="muted" style="font-size:13px">${name === "Building" ? "Plan posts from the Roadmap, or add a clip's moments to a new post." : "None yet."}</p>`}
     </div>`;
   }).join("");
 }
