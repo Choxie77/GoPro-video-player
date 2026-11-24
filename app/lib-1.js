@@ -1576,7 +1576,7 @@ function buildMap() {
   // the route between stops: straight overland, a bowed dashed arc for flights
   const visits = journeyVisits().filter((v) => showPre() || !v.pre);
   const legG = geo.append("g");
-  M.legs = [];
+  M.legs = []; M.legDim = null;
   for (let i = 1; i < visits.length; i++) {
     const a = visits[i - 1], b = visits[i], [x0, y0] = proj([a.lon, a.lat]), [x1, y1] = proj([b.lon, b.lat]);
     const flight = km(a, b) > 400;
@@ -1594,7 +1594,7 @@ function buildMap() {
   M.labG = svg.append("g");
   M.items = clips.map((c) => { const [px, py] = proj([c.lon, c.lat]); return {c, px, py}; }).sort((a, b) => prio(b.c) - prio(a.c));
   const zoom = d3.zoom().scaleExtent([M.minK, Math.max(16384, 256 * 2 ** 19 / W)]).translateExtent([[0, yTop], [W, yBot]])
-    .on("zoom", (e) => { if (e.sourceEvent) hidePicker(); if (e.sourceEvent && J.on && J.playing) pauseJourney(); M.t = e.transform; geo.attr("transform", e.transform); placeMarker(); schedule(); });
+    .on("zoom", (e) => { if (e.sourceEvent) hidePicker(); if (e.sourceEvent && J.on && J.playing) pauseJourney(); M.t = e.transform; geo.attr("transform", e.transform); markMoving(); placeMarker(); schedule(); });
   svg.call(zoom);
   M.svg = svg; M.geo = geo; M.zoom = zoom; M.built = true;
   $("mp-in").onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 2);
@@ -1646,13 +1646,22 @@ function flyTo(clips, maxK = 4000, dur = 800) {
   if (!dur || reduce) M.svg.call(M.zoom.transform, t); else M.svg.transition().duration(dur).call(M.zoom.transform, t);
 }
 function schedule() { if (!M.raf) M.raf = requestAnimationFrame(() => { M.raf = 0; drawOverlay(); }); }
+// pan / zoom / fly in progress: heavy extras (glows, glass blur, loading new street tiles) wait until it settles
+function markMoving() {
+  const w = $("mp-wrap");
+  if (!M.moving) { M.moving = true; w.classList.add("moving"); }
+  clearTimeout(M.movT);
+  M.movT = setTimeout(() => { M.moving = false; w.classList.remove("moving"); M.tileKey = ""; schedule(); }, 160);
+}
 function drawOverlay() {
   if (!M.built || !M.t) return;
   const t = M.t, k = t.k, W = M.W, H = M.H;
   // pins: greedy grouping in screen space, best footage first so it becomes the group's cover
   const CW = 82, CH = 66, cells = new Map(), clusters = [];
   updateTiles(t);
-  updateDetail(t);
+  // street map on: the CSS hides the baked detail, place names and country names underneath, so none of that is worked out
+  const tilesOn = !!M.tileG && zOf(k) >= TILE_FROM;
+  if (!tilesOn) updateDetail(t);
   for (const it of M.items) {
     if (J.on && !J.seen.has(it.c.id)) continue;
     const x = t.applyX(it.px), y = t.applyY(it.py);
@@ -1682,18 +1691,23 @@ function drawOverlay() {
     cl.sig = `${n}|${cl.name}|${rep.id}|${cl.pw}`;
   }
   $("mp-pins").classList.toggle("focus", !!selIds);
-  const boxes = clusters.map((cl) => [cl.x - cl.pw / 2 - 8, cl.y - cl.pw * 0.5625 - 34, cl.x + cl.pw / 2 + 8, cl.y + 14]);
   d3.select("#mp-pins").selectAll(".pin").data(clusters, (d) => d.key).join((enter) => enter.append("button").attr("class", "pin"))
     .each(function (d) {
+      // only touch the DOM for what changed: style and layout work is what makes a pan or zoom stutter
       if (this._sig !== d.sig) {
         this.innerHTML = `<span class="ph" style="${thumbStyle(d.ms[0], coverFrame(d.ms[0]))}">${d.ms.length > 1 ? `<b>${d.ms.length}</b>` : ""}</span><span class="nm">${esc(d.name)}</span><span class="tl"></span>`;
         this._sig = d.sig;
+        this.setAttribute("aria-label", `${d.name}: ${d.ms.length} clip${d.ms.length > 1 ? "s" : ""}`);
       }
-      this.className = "pin" + (d.sel ? " sel" : "") + (d.small ? " small" : "") + (d.pre ? " pre" : "") + (d.ms.some((c) => M.hot.has(c.id)) ? " here" : "");
-      this.style.setProperty("--pc", d.pc); this.style.setProperty("--pw", d.pw + "px");
-      this.style.transform = `translate(${d.x.toFixed(1)}px, ${d.y.toFixed(1)}px) translate(-50%, -100%)`;
-      this.setAttribute("aria-label", `${d.name}: ${d.ms.length} clip${d.ms.length > 1 ? "s" : ""}`);
+      const cls = "pin" + (d.sel ? " sel" : "") + (d.small ? " small" : "") + (d.pre ? " pre" : "") + (d.ms.some((c) => M.hot.has(c.id)) ? " here" : "");
+      if (this._cls !== cls) { this.className = cls; this._cls = cls; }
+      if (this._pc !== d.pc) { this.style.setProperty("--pc", d.pc); this._pc = d.pc; }
+      if (this._pw !== d.pw) { this.style.setProperty("--pw", d.pw + "px"); this._pw = d.pw; }
+      const tr = `translate(${d.x.toFixed(1)}px, ${d.y.toFixed(1)}px) translate(-50%, -100%)`;
+      if (this._tr !== tr) { this.style.transform = tr; this._tr = tr; }
     });
+  if (tilesOn) { drawScale(t, k, W, H); return; }
+  const boxes = clusters.map((cl) => [cl.x - cl.pw / 2 - 8, cl.y - cl.pw * 0.5625 - 34, cl.x + cl.pw / 2 + 8, cl.y + 14]);
   // country names: visited ones first, then the biggest, skipping any that would collide or that fill the whole view
   const labs = [];  // boxes already holds the pins, so names never sit under one
   const cand = M.feats.filter((d) => (d.visited || d.area * k * k > 7000) && d.area * k * k < W * H * 5)
@@ -1708,13 +1722,21 @@ function drawOverlay() {
   M.labG.selectAll("text").data(labs, (d) => d.name).join("text").attr("class", (d) => "clabel" + (d.visited ? " visited" : ""))
     .attr("x", (d) => d.sx).attr("y", (d) => d.sy + 4).text((d) => d.name);
   drawPlaces(t, boxes);
+  drawScale(t, k, W, H);
+}
+function drawScale(t, k, W, H) {
   // scale bar: a round distance about 90 px long at the map's middle latitude
   const lat = M.proj.invert([t.invertX(W / 2), t.invertY(H / 2)])[1];
   const mPerPx = 6371000 * Math.cos(toRad(lat)) / (M.proj.scale() * k);
   const target = mPerPx * 90, pow = 10 ** Math.floor(Math.log10(target)), nice = [1, 2, 5, 10].map((m) => m * pow).filter((v) => v <= target).pop() || pow;
-  $("mp-scale").querySelector("i").style.width = `${Math.round(nice / mPerPx)}px`;
-  $("mp-scale").querySelector("span").textContent = nice >= 1000 ? `${(nice / 1000).toLocaleString()} km` : `${nice} m`;
-  M.legs.forEach((l) => { l.el.style.opacity = !l.flight && k > 2500 ? 0.35 : ""; });
+  const w = `${Math.round(nice / mPerPx)}px`, label = nice >= 1000 ? `${(nice / 1000).toLocaleString()} km` : `${nice} m`;
+  if (M.scaleW !== w || M.scaleL !== label) {
+    M.scaleW = w; M.scaleL = label;
+    if (!M.scaleEl) M.scaleEl = [$("mp-scale").querySelector("i"), $("mp-scale").querySelector("span")];
+    M.scaleEl[0].style.width = w; M.scaleEl[1].textContent = label;
+  }
+  const dim = k > 2500;
+  if (M.legDim !== dim) { M.legDim = dim; M.legs.forEach((l) => { l.el.style.opacity = !l.flight && dim ? 0.35 : ""; }); }
 }
 function setHot(ids) {
   for (const id of M.hot) M.tracks.get(id)?.classList.remove("hot");
@@ -1954,11 +1976,12 @@ $("mp-panel").addEventListener("click", (e) => {
 });
 $("mp-panel").addEventListener("mouseover", (e) => {
   const t = e.target.closest("[data-clip],[data-sel]");
-  if (!t) return;
+  if (!t || t === M.hoverEl) return;  // the same card again: nothing to redo
+  M.hoverEl = t;
   if (t.dataset.clip) return setHot([t.dataset.clip]);
   const [k, ...rest] = t.dataset.sel.split("|"); if (k) setHot(makeSel(k, rest.join("|")).clips.map((c) => c.id));
 });
-$("mp-panel").addEventListener("mouseleave", () => setHot([]));
+$("mp-panel").addEventListener("mouseleave", () => { M.hoverEl = null; setHot([]); });
 
 /* ---------- the day strip ---------- */
 function buildDays() {
@@ -2075,6 +2098,7 @@ function updateTiles(t) {
   if (!M.tileG) return;
   const host = $("mp-svg"), z = zOf(t.k), W = M.W, H = M.H, on = z >= TILE_FROM;
   host.classList.toggle("tiles-on", on); host.classList.toggle("z-far", z < 7);
+  host.classList.toggle("tiles-deep", z >= 9 && !M.tileErr);  // (a failed tile keeps the world outlines as a fallback)
   const at = $("mp-attr"); if (at) at.hidden = !on;
   M.tileG.attr("display", on ? null : "none");
   if (!on) return;
@@ -2082,12 +2106,18 @@ function updateTiles(t) {
   const style = "osm"; host.classList.toggle("tiles-dark", darkNow());
   const i0 = Math.max(0, Math.floor(t.invertX(0) / S)), i1 = Math.min(N - 1, Math.floor(t.invertX(W) / S));
   const j0 = Math.max(0, Math.floor((t.invertY(0) - y0) / S)), j1 = Math.min(N - 1, Math.floor((t.invertY(H) - y0) / S));
+  // same tiles as the last frame: nothing to add or remove. While the map is moving, look for new tiles at most every 150 ms (a long fly would otherwise ask for every zoom level on the way).
+  const tk = `${n}|${i0}|${i1}|${j0}|${j1}`;
+  if (tk === M.tileKey) return;
+  const nowMs = performance.now();
+  if (M.moving && nowMs - (M.tileAt || 0) < 150) return;
+  M.tileKey = tk; M.tileAt = nowMs;
   const want = [];
   for (let j = j0; j <= j1 && want.length < 96; j++) for (let i = i0; i <= i1 && want.length < 96; i++) want.push({i, j, n, key: `${style}/${n}/${i}/${j}`, url: `https://tile.openstreetmap.org/${n}/${i}/${j}.png`});
   const have = new Set(M.tileG.selectAll("image").data().map((d) => d.key));
   const fresh = want.filter((d) => !have.has(d.key));
   if (fresh.length) M.tileG.selectAll("image.new").data(fresh, (d) => d.key).enter().append("image").attr("class", "tile").datum((d) => d)
-    .attr("href", (d) => d.url).attr("x", (d) => d.i * S).attr("y", (d) => y0 + d.j * S).attr("width", S).attr("height", S).attr("preserveAspectRatio", "none").attr("decoding", "async");
+    .on("error", () => { M.tileErr = true; $("mp-svg").classList.remove("tiles-deep"); }).attr("href", (d) => d.url).attr("x", (d) => d.i * S).attr("y", (d) => y0 + d.j * S).attr("width", S).attr("height", S).attr("preserveAspectRatio", "none").attr("decoding", "async");
   // keep the previous zoom level's tiles under the new ones until they have loaded, then drop them (and anything far off screen)
   if (M.tileN !== n) { M.tileN = n; clearTimeout(M.tileT); M.tileT = setTimeout(() => M.tileG.selectAll("image").filter((d) => d.n !== M.tileN).remove(), 900); }
   const keep = new Set(want.map((d) => d.key));

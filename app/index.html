@@ -254,7 +254,11 @@ dialog::backdrop { background: rgba(5, 10, 14, .6); }
 .hi { pointer-events: none; } .hi-sea { fill: var(--ocean); } .hi-c { fill: var(--land); stroke: var(--land-line); stroke-width: .7; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .dt path { pointer-events: none; fill: none; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
 .tile { pointer-events: none; }
-#mp-svg.tiles-dark .tile { filter: invert(1) hue-rotate(180deg) brightness(.82) contrast(.92) saturate(.7); }
+/* one colour filter over the whole tile layer (one off-screen pass per frame) instead of one per tile image */
+#mp-svg.tiles-dark .tiles { filter: invert(1) hue-rotate(180deg) brightness(.82) contrast(.92) saturate(.7); }
+/* deep zoom: the street tiles cover everything, so the world outlines underneath are not painted at all */
+#mp-svg.tiles-deep { background: var(--land); }
+#mp-svg.tiles-deep .country, #mp-svg.tiles-deep .graticule { display: none; }
 #mp-svg.tiles-on .hi, #mp-svg.tiles-on .dt, #mp-svg.tiles-on .pl, #mp-svg.tiles-on .clabel { display: none; }
 .tile-attr { position: absolute; right: 8px; bottom: 4px; font: 500 10px var(--body); color: var(--muted); background: color-mix(in srgb, var(--surface) 80%, transparent); padding: 1px 6px; border-radius: 4px; pointer-events: none; }
 .dt .dt-land { fill: var(--land); } .dt .dt-sea { fill: var(--ocean); }
@@ -561,6 +565,12 @@ dialog::backdrop { background: rgba(32,33,36,.55); }
 .chipbtn[aria-pressed="true"] em { color: var(--bg); }
 .crumbs, .scalebar, .maplegend, .map-ctl button { border-color: var(--line); border-radius: 10px; }
 .map-ctl button { border-radius: 50%; }
+/* while the map is moving: no glow filters and no glass blur (they re-render every frame); they come back when it stops */
+.mapwrap.moving .leg, .mapwrap.moving .leg.flight, .mapwrap.moving .jr-done, .mapwrap.moving .jr-live { filter: none; }
+.mapwrap.moving .crumbs, .mapwrap.moving .scalebar, .mapwrap.moving .maplegend, .mapwrap.moving .map-ctl button, .mapwrap.moving .map-top input[type=search]
+  { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* the side list only paints the cards that are on screen */
+.mclip { content-visibility: auto; contain-intrinsic-size: auto 150px; }
 /* map polish: softer sea, route halos, glass controls, bolder pins, real full screen */
 .mapwrap { border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent); box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 12px 32px -12px rgb(0 0 0 / .35); }
 .mapwrap #mp-svg { background: radial-gradient(120% 90% at 50% 40%, color-mix(in srgb, var(--ocean) 88%, var(--ink) 12%), var(--ocean) 70%); }
