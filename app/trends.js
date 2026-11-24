@@ -18,27 +18,64 @@
   const toast = (m, bad) => (typeof window.toast === "function" ? window.toast(m, bad) : console.log(m));
 
   const css = el("style", {textContent: `
-    #v-hooks .gtat-sum { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 6px; }
-    #v-hooks .gtat-note { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
-    #v-hooks .gtat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 14px; margin-top: 14px; }
-    #v-hooks .gtat-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-    #v-hooks .gtat-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-    #v-hooks .gtat-top h3 { font-size: 16px; }
-    #v-hooks .gtat-line { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; overflow-wrap: anywhere; }
-    #v-hooks .gtat-sub { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 4px; }
-    #v-hooks .gtat-ex { font-size: 13px; margin: 2px 0; overflow-wrap: anywhere; }
-    #v-hooks .gtat-ex a { color: var(--link, var(--accent)); }
-    #v-hooks .gtat-clip { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
-    #v-hooks .gtat-clip b { overflow-wrap: anywhere; }
+    #v-hooks { --gtat-r: 16px; }
+    #v-hooks .gtat-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 12px; margin: 18px 0 8px; }
+    #v-hooks .gtat-stat { border: 1px solid var(--line); border-radius: var(--gtat-r); padding: 14px 18px; display: grid; gap: 2px; }
+    #v-hooks .gtat-stat b { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+    #v-hooks .gtat-stat span { color: var(--muted); font-size: 13px; }
+    #v-hooks .gtat-stat.flag b { color: var(--warn); }
+    #v-hooks .gtat-note { color: var(--muted); font-size: 13px; margin: 6px 0 0; max-width: 72ch; }
+    #v-hooks .gtat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 16px; margin-top: 22px; }
+    #v-hooks .gtat-card { border: 1px solid var(--line); border-radius: var(--gtat-r); padding: 20px; background: var(--surface); display: flex; flex-direction: column; gap: 18px; min-width: 0; transition: border-color .15s; }
+    #v-hooks .gtat-card:hover { border-color: var(--muted); }
+    #v-hooks .gtat-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+    #v-hooks .gtat-rank { font: 600 12px/1 var(--mono, monospace); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 6px 7px; font-variant-numeric: tabular-nums; }
+    #v-hooks .gtat-type { font-size: 13px; font-weight: 500; color: var(--muted); margin: 0; }
+    #v-hooks .gtat-n { font-size: 12px; color: var(--muted); }
+    #v-hooks .gtat-mult { text-align: right; line-height: 1.05; }
+    #v-hooks .gtat-mult b { display: block; font-size: 30px; font-weight: 600; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+    #v-hooks .gtat-mult span { font-size: 11px; color: var(--muted); }
+    #v-hooks .gtat-bar { height: 4px; border-radius: 4px; background: var(--hover, var(--line)); overflow: hidden; margin-top: -8px; }
+    #v-hooks .gtat-bar i { display: block; height: 100%; background: var(--ink); border-radius: 4px; }
+    #v-hooks .gtat-line { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.2; overflow-wrap: anywhere; text-wrap: balance; margin: 0; }
+    #v-hooks .gtat-line em { font-style: normal; color: var(--muted); }
+    #v-hooks .gtat-sub { color: var(--muted); font-size: 12px; font-weight: 500; margin: 0 0 8px; }
+    #v-hooks .gtat-exs { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+    #v-hooks .gtat-ex { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 12px; border-radius: 10px; background: var(--hover, transparent); }
+    #v-hooks .gtat-ex a { color: var(--link, var(--accent)); font-size: 13px; font-weight: 500; text-decoration: none; overflow-wrap: anywhere; }
+    #v-hooks .gtat-ex a:hover { text-decoration: underline; }
+    #v-hooks .gtat-ex .v { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 500; }
+    #v-hooks .gtat-ex q { grid-column: 1 / -1; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+    #v-hooks .gtat-foot { margin-top: auto; display: grid; gap: 12px; padding-top: 18px; border-top: 1px solid var(--line); }
+    #v-hooks .gtat-clip { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 14px; align-items: center; }
+    #v-hooks .gtat-thumb { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background-color: var(--thumb-bg, var(--hover)); background-repeat: no-repeat; text-decoration: none; color: #fff; }
+    #v-hooks .gtat-thumb .pl { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.18); transition: background .15s; }
+    #v-hooks .gtat-thumb .pl svg { width: 30px; height: 30px; }
+    #v-hooks .gtat-thumb:hover .pl { background: rgba(0,0,0,.35); }
+    #v-hooks .gtat-thumb .t { position: absolute; right: 6px; bottom: 6px; font: 600 11px/1 var(--mono, monospace); background: rgba(0,0,0,.7); padding: 3px 5px; border-radius: 5px; }
+    #v-hooks .gtat-meta { display: grid; gap: 3px; min-width: 0; }
+    #v-hooks .gtat-meta b { font-size: 15px; font-weight: 600; }
+    #v-hooks .gtat-meta .f { font: 11px/1.3 var(--mono, monospace); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #v-hooks .gtat-match { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    #v-hooks .gtat-match .m { flex: 1; max-width: 90px; height: 4px; border-radius: 4px; background: var(--hover, var(--line)); overflow: hidden; }
+    #v-hooks .gtat-match .m i { display: block; height: 100%; background: var(--good, var(--ink)); }
+    #v-hooks .gtat-acts { display: flex; gap: 8px; }
+    #v-hooks .gtat-acts .btn { flex: 1; justify-content: center; }
     #v-hooks .gtat-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    #v-hooks .gtat-empty { color: var(--muted); font-size: 13px; }
-    #v-hooks .gtat-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0; }
-    #v-hooks .gtat-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); font-weight: 600; }
-    #v-hooks .gtat-form input, #v-hooks .gtat-form select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; min-width: 0; }
-    #v-hooks table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
-    #v-hooks th, #v-hooks td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
-    #v-hooks th { color: var(--muted); font-weight: 600; }
+    #v-hooks .gtat-empty { color: var(--muted); font-size: 13px; margin: 0; }
+    #v-hooks .gtat-none { border: 1px dashed var(--line); border-radius: 10px; padding: 14px; }
+    #v-hooks .gtat-own { margin-top: 36px; border: 1px solid var(--line); border-radius: var(--gtat-r); padding: 22px; }
+    #v-hooks .gtat-own details { margin-top: 14px; }
+    #v-hooks .gtat-own summary { cursor: pointer; font-weight: 500; }
+    #v-hooks .gtat-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 14px 0; }
+    #v-hooks .gtat-form label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); font-weight: 500; }
+    #v-hooks .gtat-form input, #v-hooks .gtat-form select { font: inherit; font-size: 14px; color: var(--ink); background: var(--hover, var(--surface)); border: 1px solid transparent; border-radius: 10px; padding: 9px 11px; min-width: 0; }
+    #v-hooks .gtat-form input:focus, #v-hooks .gtat-form select:focus { outline: none; border-color: var(--ink); background: var(--surface); }
+    #v-hooks table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 14px; }
+    #v-hooks th, #v-hooks td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+    #v-hooks th { color: var(--muted); font-weight: 500; font-size: 12px; }
     #v-hooks .gtat-scroll { overflow-x: auto; }
+    @media (max-width: 420px) { #v-hooks .gtat-clip { grid-template-columns: 1fr; } #v-hooks .gtat-line { font-size: 21px; } #v-hooks .gtat-acts { flex-direction: column; } }
   `});
   document.head.append(css);
 
@@ -89,31 +126,68 @@
     if (id) { toast("Post started with this hook as the opener"); location.hash = "#posts"; }
   }
 
-  function card(t) {
+  const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+  const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>';
+  // Sprite frame closest to second t, using the Library's helpers when they exist.
+  const thumbAt = (c, t) => {
+    try {
+      if (typeof thumbStyle !== "function" || !c?.sp) return "";
+      if (typeof nearestFrame === "function") return thumbStyle(c, nearestFrame(c, t));
+      if (Array.isArray(c.ft) && c.ft.length) { let k = 0; c.ft.forEach((x, j) => { if (Math.abs(x - t) < Math.abs(c.ft[k] - t)) k = j; }); return thumbStyle(c, k); }
+      return thumbStyle(c, 0);
+    } catch (e) { return ""; }
+  };
+  // The hook line with any unfilled [place]/[day] dimmed so the filled part reads first.
+  const lineEl = (txt) => { const p = el("p", {className: "gtat-line"}); String(txt).split(/(\[[^\]]+\])/).forEach((x) => p.append(/^\[.*\]$/.test(x) ? el("em", {textContent: x}) : x)); return p; };
+
+  function card(t, i, all) {
     const ex = t.reels.slice(0, 2), best = bestFor(t.name);
     const c = best ? clipOf(best.c.clip) : null;
-    const line = fill(t.template, c);
-    const play = c && c.drive && typeof itemsLink === "function"
-      ? el("a", {className: "btn quiet", href: itemsLink([{clip: c.id, a: best.c.start_s}], "light"), target: "gopro-player", rel: "noopener", textContent: "▶ Watch it"}) : null;
+    const top = Math.max(...all.map((x) => +x.median || 0), 1);
+    const at = best ? Math.max(0, best.c.start_s || 0) : 0;
+    const href = c && c.drive && typeof itemsLink === "function" ? itemsLink([{clip: c.id, a: best.c.start_s}], "light") : null;
+    const place = c && (c.city || c.region || c.country) || best?.c.place;
+    const fname = c ? (c.title || c.name || best.c.name) : "";
+    const match = best ? Math.round(Math.min(best.c.score, 1) * 100) : 0;
+    let foot;
+    if (best && c) {
+      const thumb = el(href ? "a" : "div", {className: "gtat-thumb", title: href ? `Watch from ${mmss(at)}` : ""});
+      const st = thumbAt(c, at); if (st) thumb.setAttribute("style", st);
+      if (href) Object.assign(thumb, {href, target: "gopro-player", rel: "noopener"});
+      thumb.append(Object.assign(el("span", {className: "pl"}), {innerHTML: PLAY}), el("span", {className: "t", textContent: mmss(at)}));
+      foot = el("div", {className: "gtat-foot"},
+        el("p", {className: "gtat-sub", style: "margin:0", textContent: "Your footage for it"}),
+        el("div", {className: "gtat-clip"}, thumb,
+          el("div", {className: "gtat-meta"},
+            el("b", {textContent: [place, c.day ? `Day ${c.day}` : ""].filter(Boolean).join(" · ") || "Matched clip"}),
+            el("span", {className: "f", title: fname, textContent: fname}),
+            el("span", {className: "gtat-match"}, el("span", {className: "m"}, el("i", {style: `width:${match}%`})), `${match}% scene match`))),
+        el("div", {className: "gtat-acts"},
+          el("button", {className: "btn", type: "button", textContent: "Start a post from this", onclick: (e) => { e.target.disabled = true; startPost(t.name, ex[0], best).finally(() => { e.target.disabled = false; }); }}),
+          href ? el("a", {className: "btn quiet", href, target: "gopro-player", rel: "noopener", textContent: "▶ Watch it", style: "flex:0 0 auto"}) : null));
+    } else {
+      foot = el("div", {className: "gtat-foot"},
+        el("p", {className: "gtat-sub", style: "margin:0", textContent: "Your footage for it"}),
+        el("p", {className: "gtat-empty gtat-none", textContent: `No tagged clip fits yet (${data.clips_considered} scanned). This fills in as clips get scene tags.`}));
+    }
     return el("article", {className: "gtat-card"},
-      el("div", {className: "gtat-top"}, el("h3", {textContent: label(t.name)}),
-        el("span", {className: "chip", textContent: `${t.median}× typical views · ${t.n} reel${t.n > 1 ? "s" : ""}`})),
-      el("div", {className: "gtat-line", textContent: line}),
+      el("div", {className: "gtat-head"},
+        el("span", {className: "gtat-rank", textContent: "#" + (i + 1)}),
+        el("div", {}, el("h3", {className: "gtat-type", textContent: label(t.name)}), el("span", {className: "gtat-n", textContent: `${t.n} viral reel${t.n > 1 ? "s" : ""}`})),
+        el("div", {className: "gtat-mult", title: "Median views compared with each creator's usual reel"}, el("b", {textContent: `${Math.round(t.median)}×`}), el("span", {textContent: "typical views"}))),
+      el("div", {className: "gtat-bar", "aria-hidden": "true"}, el("i", {style: `width:${Math.max(4, (t.median / top) * 100)}%`})),
+      lineEl(fill(t.template, c)),
       el("div", {}, el("p", {className: "gtat-sub", textContent: "Seen on"}),
-        ex.map((r) => el("p", {className: "gtat-ex"}, el("a", {href: r.url, target: "_blank", rel: "noopener noreferrer", textContent: `@${r.handle}`}),
-          ` · ${r.hook_text ? "“" + r.hook_text + "”" : "no text, the shot is the hook"} · ${fmt(r.views)} views`))),
-      el("div", {}, el("p", {className: "gtat-sub", textContent: "Your footage for it"}),
-        best && c ? el("div", {className: "gtat-clip"},
-          el("b", {textContent: c.title || c.name || best.c.name}),
-          el("span", {className: "muted", textContent: `${[best.c.place, `from ${Math.floor(best.c.start_s / 60)}:${String(Math.floor(best.c.start_s % 60)).padStart(2, "0")}`].filter(Boolean).join(" · ")} · scene match ${Math.round(Math.min(best.c.score, 1) * 100)}%`}),
-          el("div", {className: "gtat-row"}, play,
-            el("button", {className: "btn", type: "button", textContent: "Start a post from this", onclick: (e) => { e.target.disabled = true; startPost(t.name, ex[0], best).finally(() => { e.target.disabled = false; }); }})))
-        : el("p", {className: "gtat-empty", textContent: `No tagged clip fits yet (${data.clips_considered} scanned). This fills in as clips get scene tags.`})));
+        el("ul", {className: "gtat-exs"}, ex.map((r) => el("li", {className: "gtat-ex"},
+          el("a", {href: r.url, target: "_blank", rel: "noopener noreferrer", textContent: `@${r.handle}`}),
+          el("span", {className: "v", textContent: `${fmt(r.views)} views`}),
+          el("q", {textContent: r.hook_text || "No text, the shot is the hook"}))))),
+      foot);
   }
 
   function ownSection(rows) {
     const an = data.own_analysis || {};
-    const box = el("div", {className: "section"}, el("h2", {textContent: "Your posted reels"}),
+    const box = el("div", {className: "gtat-own"}, el("h2", {textContent: "Your posted reels"}),
       el("p", {className: "gtat-note", textContent: "Log each reel you post, then add its numbers a day or two later. Comparisons appear from 3 reels and update when Claude Code runs the playbook."}));
     const num = (k, ph) => el("input", {type: "number", step: "any", min: "0", name: k, placeholder: ph || ""});
     const form = el("form", {className: "gtat-form"},
@@ -173,11 +247,12 @@
       view.replaceChildren(
         el("div", {className: "page-head"}, el("div", {}, el("h1", {textContent: "Hooks"}),
           el("p", {textContent: "What opens the travel reels that break out, and which of your clips could open yours."})), refresh),
-        el("div", {className: "gtat-sum"},
-          el("span", {className: "chip", textContent: `${data.viral_count} viral reels studied`}), el("span", {className: "chip", textContent: `${data.types.length} hook types`}),
-          el("span", {className: "chip" + (data.clips_considered < 100 ? " flag" : ""), textContent: `${data.clips_considered} of your clips scanned`})),
+        el("div", {className: "gtat-stats"},
+          el("div", {className: "gtat-stat"}, el("b", {textContent: String(data.viral_count)}), el("span", {textContent: "viral reels studied"})),
+          el("div", {className: "gtat-stat"}, el("b", {textContent: String(data.types.length)}), el("span", {textContent: "hook types"})),
+          el("div", {className: "gtat-stat" + (data.clips_considered < 100 ? " flag" : "")}, el("b", {textContent: String(data.clips_considered)}), el("span", {textContent: data.clips_considered < 100 ? "of your clips scanned so far" : "of your clips scanned"}))),
         el("p", {className: "gtat-note", textContent: `Updated ${String(data.generated).slice(0, 10)}. Numbers are how far each reel beat its creator’s usual views. Small sample, so treat each hook as something to test.`}),
-        el("div", {className: "gtat-grid"}, ...data.types.map(card)),
+        el("div", {className: "gtat-grid"}, ...[...data.types].sort((x, y) => (+y.median || 0) - (+x.median || 0)).map(card)),
         ownSection(rows));
     } catch (e) {
       view.replaceChildren(el("div", {className: "page-head"}, el("div", {}, el("h1", {textContent: "Hooks"}))), el("p", {className: "gtat-empty", textContent: e.message || "Couldn't load hooks."}),
