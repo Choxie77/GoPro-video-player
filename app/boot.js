@@ -65,9 +65,9 @@
       s.onload = () => ok(); s.onerror = () => bad(new Error("Google sign-in didn't load")); document.head.append(s);
     });
   }
-  async function requestToken(prompt) {
+  async function requestToken(prompt, fromClick) {
     if (TEST) return token;
-    if (tokenWait) return tokenWait;
+    if (tokenWait && !fromClick) return tokenWait; /* a click always starts its own popup, never joins an earlier blocked attempt */
     if (!window.google?.accounts?.oauth2) await loadGoogle(); /* awaiting here would lose the click and the browser would block the popup */
     tokenWait = new Promise((ok, bad) => {
       tokenClient = tokenClient || google.accounts.oauth2.initTokenClient({client_id: CLIENT_ID, scope: SCOPE, callback: () => {}});
@@ -336,12 +336,12 @@
   }
   loadGoogle().catch(() => {}); /* load Google's script before the first click so the popup opens straight from the click */
   gateBtn.onclick = async () => {
-    try { await requestToken(token || wasSignedIn() ? "" : "consent"); start(); }
+    try { await requestToken(token || wasSignedIn() ? "" : "consent", true); start(); }
     catch (e) { gateSay("Sign-in didn't finish", e?.message || "Try again.", true); }
   };
   document.head.append(css);
   document.body.append(gate, bar, dialog);
   function wasSignedIn() { try { return localStorage.getItem("gta-signed-in") === "1"; } catch (e) { return false; } }
   if (loadSavedToken()) start();
-  else if (wasSignedIn()) requestToken("none").then(() => start()).catch(() => {}); /* silent re-sign-in; if the browser blocks it, the button is one click with no consent screen */
+  /* no automatic sign-in on load: browsers block a popup that no click started, so the button below does it */
 })();
