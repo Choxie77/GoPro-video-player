@@ -22,6 +22,20 @@
     #gta-gate > div { max-width: 460px; display: grid; gap: 14px; }
     #gta-gate h1 { margin: 0; font-size: 28px; line-height: 1.15; }
     #gta-gate p { margin: 0; color: #b6bdc2; }
+    #gta-gate { transition: opacity .45s ease; }
+    #gta-gate.gta-out { opacity: 0; pointer-events: none; }
+    #gta-load { display: none; width: 96px; height: 96px; margin-bottom: 4px; overflow: visible; }
+    #gta-gate.gta-loading #gta-load { display: block; }
+    #gta-load .ring { fill: none; stroke: #3a3f44; stroke-width: 2; }
+    #gta-load .orbit { fill: none; stroke: #7c8fe8; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 55 285; transform-origin: 48px 48px; animation: gtaSpin 1.3s cubic-bezier(.5,.1,.5,.9) infinite; }
+    #gta-load .peak { fill: none; stroke: #eceff1; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 100; stroke-dashoffset: 100; animation: gtaDraw 1.6s ease-in-out infinite; }
+    #gta-load .snow { fill: #7c8fe8; opacity: 0; transform-origin: 40px 33px; animation: gtaPop 1.6s ease-in-out infinite; }
+    #gta-gate.gta-loading p::after { content: ""; animation: gtaDots 1.2s steps(4) infinite; }
+    @keyframes gtaSpin { to { transform: rotate(360deg); } }
+    @keyframes gtaDraw { 0% { stroke-dashoffset: 100; } 55%, 85% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -100; } }
+    @keyframes gtaPop { 0%, 45% { opacity: 0; transform: scale(.4); } 65%, 85% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+    @keyframes gtaDots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+    @media (prefers-reduced-motion: reduce) { #gta-load .orbit, #gta-load .peak, #gta-load .snow, #gta-gate.gta-loading p::after { animation: none; } #gta-load .peak { stroke-dashoffset: 0; } #gta-load .snow { opacity: 1; } }
     .gta-btn { justify-self: start; padding: 10px 16px; font: 600 14px/1.3 Inter, system-ui, sans-serif; color: #17191c; background: #e9ecef; border: 1px solid #17191c; border-radius: 8px; cursor: pointer; }
     .gta-btn:focus-visible { outline: 2px solid #4f8cff; outline-offset: 2px; }
     #gta-bar { position: fixed; z-index: 2147481000; left: 50%; transform: translateX(-50%); top: calc(8px + env(safe-area-inset-top, 0px)); max-width: calc(100vw - 32px); display: flex; gap: 10px; align-items: center; padding: 8px 12px; color: #17191c; background: #f2c94c; border: 1px solid #17191c; border-radius: 8px; font: 500 13px/1.35 Inter, system-ui, sans-serif; }
@@ -33,9 +47,10 @@
   const gateTitle = el("h1", {textContent: "GoPro Travels"});
   const gateText = el("p", {textContent: "Sign in with the Google account that holds your footage."});
   const gateBtn = el("button", {className: "gta-btn", type: "button", textContent: "Sign in with Google"});
-  const gate = el("div", {id: "gta-gate"}, el("div", {}, gateTitle, gateText, gateBtn));
+  const gateLoad = el("div", {innerHTML: '<svg id="gta-load" viewBox="0 0 96 96" aria-hidden="true"><circle class="ring" cx="48" cy="48" r="44"/><circle class="orbit" cx="48" cy="48" r="44"/><path class="peak" d="M22 66 L40 33 L52 52 L60 40 L75 66 Z"/><circle class="snow" cx="40" cy="33" r="3.6"/></svg>'}).firstChild;
+  const gate = el("div", {id: "gta-gate"}, el("div", {}, gateLoad, gateTitle, gateText, gateBtn));
   const bar = el("div", {id: "gta-bar", hidden: true, role: "status"});
-  const gateSay = (title, text, showBtn) => { gateTitle.textContent = title; gateText.textContent = text; gateBtn.hidden = !showBtn; };
+  const gateSay = (title, text, showBtn) => { gateTitle.textContent = title; gateText.textContent = text; gateBtn.hidden = !showBtn; gate.classList.toggle("gta-loading", /^Loading/.test(title)); };
   function barSay(text, action) {
     bar.hidden = !text; bar.replaceChildren();
     if (!text) return;
@@ -322,7 +337,7 @@
       document.getElementById("mapx").textContent = JSON.stringify(payload.mapx);
       document.getElementById("geo").textContent = geo;
       await startLibrary();
-      gate.remove();
+      gate.classList.add("gta-out"); setTimeout(() => gate.remove(), 500);
       checkSessions(); setInterval(checkSessions, 30000);
       setInterval(async () => {
         if (document.hidden || flushing || pending.length) return;
