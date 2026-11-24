@@ -273,57 +273,116 @@
     .ex-stage:fullscreen .ex-segs b i, .ex-stage:fullscreen .ex-head { background: #fff; }
     .ex-stage:fullscreen .ex-segs b.on { outline-color: #fff; }
     .ex-stage:fullscreen .muted { color: #bbb; }
+    .dk-spin { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; background: rgba(0,0,0,.75); color: #fff; font: 600 12px/1 system-ui, sans-serif; pointer-events: none; z-index: 6; white-space: nowrap; }
+    .dk-spin[hidden] { display: none; }
+    .dk-spin i { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: dkspin .8s linear infinite; }
+    @keyframes dkspin { to { transform: rotate(360deg); } }
+    .dk-off { position: absolute !important; width: 1px !important; height: 1px !important; opacity: 0 !important; pointer-events: none !important; }
   `;
   document.head.append(css3);
 
   const BR = window.__gtaBridge;
   const fileOf = (c) => c?.pv || c?.hd || c?.drive || null;
-  // One <video> that can show a moment, loop a range, or play a list of shots in order. The still frame stays underneath while it loads.
+  // One visible <video> that can show a moment, loop a range, or play a list of shots in order. The still frame stays underneath while it loads.
+  // Playing a list is double-buffered: while one shot plays, the next AHEAD shots load into hidden spare <video>s, so the cut is instant.
+  // A "Loading" badge shows whenever the visible video is waiting for data.
   function makeDeck(video, onTick) {
-    let id = null, seq = null, at = 0, end = null, start = 0, loop = false, raf = 0, pending = null, settling = false, retried = false, done = null, step = null;
-    const ready = () => video.classList.add("ready");
-    video.addEventListener("loadedmetadata", () => { if (pending != null) { video.currentTime = Math.min(pending, video.duration || pending); pending = null; } });
-    video.addEventListener("seeked", () => { settling = false; ready(); });
-    video.addEventListener("loadeddata", ready);
-    video.addEventListener("error", async () => {
-      if (!id || retried || !BR) return; retried = true;
-      const t = pending ?? start; await BR.token(); video.src = BR.streamUrl(id); pending = t;
-      if (!video.paused || seq) video.play().catch(() => {});
-    });
-    const put = (c, t) => {
-      const f = fileOf(c); if (!f || !BR) { id = null; video.classList.remove("ready"); video.removeAttribute("src"); return false; }
-      settling = true;
-      if (id !== f) { id = f; retried = false; video.classList.remove("ready"); video.src = BR.streamUrl(f); pending = t; video.load(); }
-      else if (video.readyState >= 1) { if (Math.abs(video.currentTime - t) < .01) { settling = false; ready(); } else video.currentTime = t; }
-      else pending = t;
+    const AHEAD = 2, host = video.parentElement, pool = [video];
+    let cur = video, seq = null, at = 0, end = null, start = 0, loop = false, raf = 0, settling = false, done = null, step = null, since = 0, note = "", noteT = 0;
+    const spin = document.createElement("div"); spin.className = "dk-spin"; spin.hidden = true; spin.setAttribute("role", "status"); spin.innerHTML = "<i></i><span></span>"; host?.append(spin);
+    const ready = (v) => v.classList.add("ready");
+    const showBusy = (b) => { if (b === !spin.hidden && !note) return; spin.hidden = !(b || note); spin.lastChild.textContent = note || (seq && at > 0 ? "Loading next shot…" : "Loading…"); };
+    const load = (v, c, t) => {
+      const f = fileOf(c);
+      if (!f || !BR) { v._f = null; v._i = -1; v.classList.remove("ready"); v.removeAttribute("src"); return false; }
+      v._t = t;
+      if (v._f !== f) { v._f = f; v._retried = false; v.classList.remove("ready"); v.src = BR.streamUrl(f); v._p = t; v.load(); }
+      else if (v.readyState >= 1) { if (Math.abs(v.currentTime - t) >= .01) v.currentTime = t; }
+      else v._p = t;
       return true;
     };
-    const stopLoop = () => { cancelAnimationFrame(raf); raf = 0; };
+    const wire = (v) => {
+      v.addEventListener("loadedmetadata", () => { if (v._p != null) { v.currentTime = Math.min(v._p, v.duration || v._p); v._p = null; } });
+      v.addEventListener("seeked", () => { if (v === cur) { settling = false; ready(v); } });
+      v.addEventListener("loadeddata", () => { if (v === cur) ready(v); });
+      v.addEventListener("error", async () => {
+        if (!v._f) return;
+        if (v._retried || !BR) { if (v === cur) { settling = false; note = "Could not load this clip"; showBusy(false); clearTimeout(noteT); noteT = setTimeout(() => { note = ""; showBusy(false); }, 3000); } v._f = null; return; }
+        v._retried = true; const t = v._p ?? (v === cur ? start : v._t ?? 0); await BR.token(); v.src = BR.streamUrl(v._f); v._p = t;
+        if (v === cur && (!v.paused || seq)) v.play().catch(() => {});
+      });
+      if (v !== video) for (const n of ["play", "pause"]) v.addEventListener(n, () => { if (v === cur) video.dispatchEvent(new Event(n)); });
+    };
+    wire(video); video._i = -1;
+    const spare = () => {
+      const v = video.cloneNode(false); v.removeAttribute("id"); v.classList.remove("ready"); v.classList.add("dk-off"); v.muted = true; v.preload = "auto"; v._i = -1;
+      video.after(v); wire(v); pool.push(v); return v;
+    };
+    const put = (c, t) => {
+      const f = fileOf(c); if (!f || !BR) { load(cur, c, t); settling = false; return false; }
+      settling = true; cur._i = -1;
+      const same = cur._f === f && cur.readyState >= 1 && Math.abs(cur.currentTime - t) < .01;
+      load(cur, c, t);
+      if (same) { settling = false; ready(cur); }
+      if (!raf) raf = nextFrame(tick);
+      return true;
+    };
+    // Fill the spare videos with the shots that come next.
+    const preload = (list, from) => {
+      if (!list || !BR) return;
+      for (let k = 1; k <= AHEAD; k++) {
+        const i = from + k; if (i >= list.length) break;
+        const s = list[i]; if (!fileOf(s.c)) continue;
+        if (pool.some((v) => v !== cur && v._i === i && v._t === s.a)) continue;
+        let v = pool.find((x) => x !== cur && (x._i < 0 || x._i <= from || x._i > from + AHEAD));
+        if (!v) { if (pool.length >= 1 + AHEAD) break; v = spare(); }
+        v._i = i; v.muted = true; v.preload = "auto"; load(v, s.c, s.a);
+      }
+    };
+    // Animation frames stop in a background tab, so a short timer backs them up and the playlist keeps moving.
+    const nextFrame = (fn) => { let d = false, a = 0, t = 0; const go = () => { if (d) return; d = true; cancelAnimationFrame(a); clearTimeout(t); fn(); }; a = requestAnimationFrame(go); t = setTimeout(go, 50); return () => { d = true; cancelAnimationFrame(a); clearTimeout(t); }; };
+    const stopLoop = () => { if (raf) raf(); raf = 0; };
     const tick = () => {
-      if (video.paused && !settling) { stopLoop(); return; }
+      if (cur.paused && !settling) { stopLoop(); since = 0; showBusy(false); return; }
+      if (cur !== video) cur.muted = video.muted;
+      const now = performance.now();
+      if (settling || (!cur.paused && cur.readyState < 3)) { since ||= now; if (now - since > 150) showBusy(true); } else { since = 0; showBusy(false); }
       if (!settling) {
-        const t = video.currentTime;
+        const t = cur.currentTime;
         if (end != null && t >= end - .02) {
           if (seq) { at++; if (at >= seq.length) { const d = done; api.stop(); d?.(); return; } shot(); }
-          else if (loop) video.currentTime = start;
-          else { video.pause(); video.currentTime = end; }
+          else if (loop) cur.currentTime = start;
+          else { cur.pause(); cur.currentTime = end; }
         } else onTick?.(t, at);
       }
-      raf = requestAnimationFrame(tick);
+      raf = nextFrame(tick);
     };
-    const run = () => { if (!raf) raf = requestAnimationFrame(tick); video.play().catch(() => {}); };
-    const shot = () => { const s = seq[at]; start = s.a; end = s.b; video.playbackRate = s.speed || 1; step?.(at, s); put(s.c, s.a); run(); };
+    const run = () => { if (!raf) raf = nextFrame(tick); cur.play().catch(() => {}); };
+    const shot = () => {
+      const s = seq[at]; start = s.a; end = s.b;
+      const pre = pool.find((v) => v !== cur && v._i === at && v._t === s.a && v._f === fileOf(s.c));
+      if (pre) {
+        const old = cur; old.pause(); old.classList.add("dk-off"); pre.classList.remove("dk-off"); pre._i = -1; cur = pre;
+        cur.muted = video.muted; cur.volume = video.volume;
+        settling = !(cur._p == null && !cur.seeking && cur.readyState >= 2);
+        if (!settling) ready(cur);
+      } else put(s.c, s.a);
+      cur.playbackRate = s.speed || 1; step?.(at, s); run(); preload(seq, at);
+    };
     const api = {
-      get playing() { return !video.paused || (!!seq && !!raf); }, get list() { return !!seq; },
-      seek(c, t) { seq = null; end = null; loop = false; video.pause(); video.playbackRate = 1; stopLoop(); return put(c, t); },
-      range(c, a, b, from) { seq = null; start = a; end = b; loop = true; video.playbackRate = 1; if (!put(c, from ?? a)) return false; run(); return true; },
+      get playing() { return !cur.paused || (!!seq && !!raf); }, get list() { return !!seq; }, get el() { return cur; },
+      seek(c, t) { seq = null; end = null; loop = false; cur.pause(); cur.playbackRate = 1; return put(c, t); },
+      range(c, a, b, from) { seq = null; start = a; end = b; loop = true; cur.playbackRate = 1; if (!put(c, from ?? a)) return false; run(); return true; },
       playList(list, onStep, onEnd, first = 0) { if (!list.length || !list.some((s) => fileOf(s.c))) return false; seq = list; at = first; step = onStep; done = onEnd; shot(); return true; },
-      pause() { video.pause(); },
-      stop() { seq = null; end = null; loop = false; done = null; step = null; video.pause(); video.playbackRate = 1; stopLoop(); },
-      kill() { api.stop(); id = null; video.removeAttribute("src"); video.load(); },
+      // Load the shots after `first` quietly in the background so Play starts and cuts instantly.
+      warm(list, first = 0) { if (!seq) preload(list, first); },
+      pause() { cur.pause(); },
+      stop() { seq = null; end = null; loop = false; done = null; step = null; cur.pause(); cur.playbackRate = 1; stopLoop(); since = 0; showBusy(false); },
+      kill() { api.stop(); clearTimeout(noteT); note = ""; pool.slice(1).forEach((v) => v.remove()); pool.length = 1; cur = video; cur.classList.remove("dk-off"); video._f = null; video.removeAttribute("src"); video.load(); spin.remove(); },
     };
     return api;
   }
+  const framing = (id, x) => $(id)?.parentElement.querySelectorAll("video").forEach((v) => { v.style.objectPosition = `${(x ?? .5) * 100}% 50%`; });
   const decks = new Set();
   const newDeck = (v, f) => { const d = makeDeck(v, f); decks.add(d); return d; };
   const killDecks = () => { decks.forEach((d) => d.kill()); decks.clear(); };
@@ -662,9 +721,9 @@
     $("px-play").onclick = () => {
       if (deck.playing) return deck.stop();
       const l = (edit?.edl.shots || []).map((s) => ({c: byId.get(s.clip), a: s.in, b: s.out, speed: s.speed, x: s.x}));
-      if (!deck.playList(l, (_, s) => { $("px-vid").style.objectPosition = `${(s.x ?? .5) * 100}% 50%`; }, () => {})) toast("Nothing playable yet", true);
+      if (!deck.playList(l, (_, s) => { framing("px-vid", s.x); }, () => {})) toast("Nothing playable yet", true);
     };
-    if (shown) $("px-vid").style.objectPosition = `${(shown.x ?? .5) * 100}% 50%`;
+    if (shown) framing("px-vid", shown.x);
     if ($("p-del")) {
       let armed = false;
       $("p-del").onclick = async (e) => {
@@ -1230,7 +1289,7 @@
     const c = s && byId.get(s.clip), t = s ? clamp(ex.t, s.in, s.out) : 0;
     ph.style.setProperty("--x", s?.x ?? .5);
     if (s) $("ex-ci").setAttribute("style", thumbStyle(c, nearestFrame(c, t)));
-    $("ex-vid").style.objectPosition = `${(s?.x ?? .5) * 100}% 50%`;
+    framing("ex-vid", s?.x);
     $("ex-text").textContent = s?.text || "";
     const list = ex.cur.edl.shots; let before = 0; for (let i = 0; i < ex.i; i++) before += shotLen(list[i]);
     $("ex-time").textContent = `${fmtT(r2(before + (s ? (t - s.in) / (s.speed || 1) : 0)))} / ${fmtT(r2(edlLen(ex.cur.edl)))}`;
@@ -1238,7 +1297,7 @@
   }
   function exPick(i, keepPlaying) {
     ex.i = i; const s = exShot(); if (!s) return;
-    if (!keepPlaying) { ex.deck?.stop(); ex.t = s.in; ex.deck?.seek(byId.get(s.clip), s.in); }
+    if (!keepPlaying) { ex.deck?.stop(); ex.t = s.in; ex.deck?.seek(byId.get(s.clip), s.in); ex.deck?.warm(ex.cur.edl.shots.map(shotSpan), i); }
     drawShot(); paintPhone();
     document.querySelectorAll("#ex-track .sx-shot").forEach((n) => n.classList.toggle("on", +n.dataset.i === i));
     q("#ex-track .sx-shot.on")?.scrollIntoView({block: "nearest", inline: "nearest"});
@@ -1283,7 +1342,7 @@
     el.onpointermove = (e) => { if (drag) exSeekEdit(at(e)); };
     const up = () => {
       if (!drag) return; drag = false;
-      if (was) { const i = ex.i, t = ex.t, l = ex.cur.edl.shots.map(shotSpan); ex.deck.playList(l, (k) => { ex.t = l[k].a; exPick(k, true); }, () => exPick(0), i); const v = $("ex-vid"); if (v.readyState >= 1) v.currentTime = t; }
+      if (was) { const i = ex.i, t = ex.t, l = ex.cur.edl.shots.map(shotSpan); ex.deck.playList(l, (k) => { ex.t = l[k].a; exPick(k, true); }, () => exPick(0), i); const v = ex.deck.el; if (v.readyState >= 1) v.currentTime = t; }
     };
     el.onpointerup = up; el.onpointercancel = up;
     el.onkeydown = (e) => { const d = e.shiftKey ? 5 : 1; if (e.key === "ArrowLeft") { e.preventDefault(); e.stopPropagation(); exSeekEdit(edNow() - d); } else if (e.key === "ArrowRight") { e.preventDefault(); e.stopPropagation(); exSeekEdit(edNow() + d); } };
@@ -1418,7 +1477,7 @@
     $("ex-auto").onclick = (e) => { const b = e.target.closest("[data-p]"); if (b) { flushEdit(); newVersion(quickShots(draft, b.dataset.p), `Auto re-cut (${b.dataset.p})`); } };
     if ($("ex-unused")) $("ex-unused").onclick = (e) => { const b = e.target.closest("[data-u]"); if (!b) return; const [s] = shotsFromMoments({items: [draft.items[+b.dataset.u]]}), i = ex.i; mutate((l) => { l.splice(i + 1, 0, {...s, m: String(+b.dataset.u + 1)}); ex.i = i + 1; }); };
     drawExTrack(); drawShot(); drawExStats();
-    const s = exShot(); if (s) { ex.t = clamp(ex.t, s.in, s.out); ex.deck.seek(byId.get(s.clip), ex.t); }
+    const s = exShot(); if (s) { ex.t = clamp(ex.t, s.in, s.out); ex.deck.seek(byId.get(s.clip), ex.t); ex.deck.warm(ex.cur.edl.shots.map(shotSpan), ex.i); }
     paintPhone();
   }
   $("pdlg").addEventListener("close", flushEdit);
