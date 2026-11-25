@@ -802,6 +802,7 @@ async function signedIn() {
   proxyReady = proxyReady || registerProxy();
   useProxy = await proxyReady;
   navigator.serviceWorker?.controller?.postMessage({type: "list"});
+  loadFeed();   // comments, notes and cuts need the sign-in token, so only now
   const {list, i} = readHash();
   if (list.length) { items = list; idx = Math.max(0, Math.min(i, items.length - 1)); show("play"); load(false); }
   else show("lib");
@@ -887,7 +888,6 @@ $("cutl").onclick = (e) => { const b = e.target.closest("[data-uncut]"); if (!b)
   postBack({action: "uncut", id: b.dataset.uncut}); FEED.cuts[id] = cutsFor(id).filter((c) => c.id !== b.dataset.uncut); paintCuts(); setTimeout(loadFeed, 2500); };
 $("cut-preview").onchange = () => { skipCuts(va()); paintCuts(); };
 const _paintOffline = paintOffline; paintOffline = function (s) { _paintOffline(s); paintComments(); paintCuts(); };
-if (BACK) loadFeed();
 addEventListener("hashchange", () => { const {list, i} = readHash(); if (list.length && token && list.map((x) => [x.orig, x.start, x.end].join()).join() !== items.map((x) => [x.orig, x.start, x.end].join()).join()) { items = list; idx = i; show("play"); load(false); } });
 loadToken();
 if (token) signedIn();
