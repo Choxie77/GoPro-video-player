@@ -31,12 +31,14 @@ main{max-width:1240px;margin:0 auto;padding:16px}
 .search{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 8px 6px 16px}
 .search input{flex:1;border:0;background:none;font-size:18px;padding:10px 0;outline:none;min-width:0}
 .hints{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0;align-items:center;color:var(--mute);font-size:13px}
+#pbar[hidden]{display:none}.chip.zero{opacity:.45}
+#pbar{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;align-items:center;padding-bottom:4px}#pbar .chip{flex:none;white-space:nowrap}#pbar .plab{flex:none;font-size:13px;color:var(--mute);margin-right:2px}
 .chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px 12px;cursor:pointer;font-size:13px}
 .chip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
 .chip small{color:var(--mute);margin-left:4px}.chip[aria-pressed=true] small{color:#ffe}
 .viz{display:grid;grid-template-columns:minmax(300px,520px) 1fr;gap:16px;margin:16px 0}
 @media(max-width:820px){.viz{grid-template-columns:1fr}}
-.globe{position:relative;background:var(--sea);border:1px solid var(--line);border-radius:16px;aspect-ratio:1/1;overflow:hidden;touch-action:none}
+.globe{position:relative;background:var(--bg);border:1px solid var(--line);border-radius:16px;aspect-ratio:1/1;overflow:hidden;touch-action:none}
 .globe canvas{width:100%;height:100%;display:block;cursor:grab}
 .globe .tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;white-space:nowrap;transform:translate(-50%,-130%)}
 .globe .now{position:absolute;left:12px;bottom:10px;right:12px;display:flex;gap:10px;align-items:center;font-size:13px}
@@ -140,6 +142,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-
       <button class="chip" id="calb" aria-pressed="false" type="button">📅 Dates</button><button class="chip" id="fp" aria-pressed="false" type="button">Adam's picks</button><button class="chip" id="fh" aria-pressed="false" type="button">My hearts</button>
       <label style="font-size:13px;color:var(--mute)">Sort <select id="sort"><option value="best">Best match</option><option value="new">Newest first</option><option value="old">Oldest first</option><option value="long">Longest first</option></select></label></div></div>
   <div class="hints" id="cbar" style="margin:0 0 12px" aria-label="Filter by country"></div>
+  <div class="hints" id="pbar" style="margin:0 0 12px" aria-label="Filter by city" hidden></div>
   <div class="grid" id="grid"></div>
   <p class="empty" id="more" hidden><button class="btn" id="moreb">Show more</button></p>
 </main>
@@ -251,7 +254,13 @@ async function loadIndex(){
   const f=await findIndex(),n=await fetchIndex(f);useIndex(n.data,n.sheets);keepCache();
 }
 function keepCache(){const l=store.get("gtx-last",null);if(l)cprune(new Set([l.key,...l.sheets.map(s=>"img:"+s[1])]))}
+/* Hong Kong is its own place on the trip: anything the geocoder filed under China (or a Hong Kong district) there becomes a country of its own. */
+const HKRE=/hong ?kong|kowloon|new territories|kwun tong|tsuen wan|sha tin|tsim sha tsui|mong kok|wan chai|victoria harbour|lantau|tuen mun|yuen long|sai kung|central and western/i;
+const inHK=(lat,lon)=>lat!=null&&lon!=null&&lat>22.13&&lat<22.57&&lon>113.82&&lon<114.45;
+const isHK=c=>c.cc==="HK"||HKRE.test([c.city,c.region,c.country,c.area].join(" "))||inHK(c.lat,c.lon);
+function makeHK(c){if(!isHK(c))return;c.country="Hong Kong";c.cc="HK";c.city="Hong Kong";if("area" in c)c.area="Hong Kong";else c.region="Hong Kong"}
 function prep(){
+  INDEX.clips.forEach(makeHK);(INDEX.stops||[]).forEach(makeHK);
   const per=new Map();for(const c of INDEX.clips){if(c.region&&c.city){if(!per.has(c.region))per.set(c.region,new Set());per.get(c.region).add(norm(c.city))}}
   METRO=new Set(["Bangkok","Ho Chi Minh City","Da Nang","Ha Noi","Tokyo","Chongqing Shi"].filter(r=>per.has(r)));
   CL=INDEX.clips.filter(c=>!c.pre).map(c=>{
@@ -342,9 +351,8 @@ function run(){
   let f=parse(S.q);const notes=[...parse.notes];
   f=f.map(x=>{if(x.k!=="txt"||x.v.length<4||/^\d/.test(x.v))return x;
     const w=fixWord(x.v);if(w!==x.v){notes.push(`No match for "${x.v}", showing "${w}".`);return{k:"txt",v:w}}return x});
-  const res=[],anyCountry=[],anyDate=new Set();
+  const res=[],anyCountry=[],anyPlace=[],anyDate=new Set();
   for(const c of CL){
-    if(S.place&&c.o.label!==S.place)continue;
     if(S.cell&&c.o.cell!==S.cell)continue;
     if(S.picks&&c.pick<2)continue;
     if(S.hearts&&!HEART[c.id])continue;
@@ -361,11 +369,13 @@ function run(){
     }
     if(!ok)continue;
     const inRange=!S.range||(c.o.date>=S.range[0]&&c.o.date<=S.range[1]),inCountry=!S.country||c.country===S.country;
-    if(inRange)anyCountry.push(c);
-    if(inCountry)anyDate.add(c.o.date);
-    if(inRange&&inCountry)res.push([sc+(c.hl||0)*2+c.pick*2,c]);
+    const inPlace=!S.place||c.o.label===S.place;
+    if(inRange&&inPlace)anyCountry.push(c);
+    if(inRange&&inCountry)anyPlace.push(c);
+    if(inCountry&&inPlace)anyDate.add(c.o.date);
+    if(inRange&&inCountry&&inPlace)res.push([sc+(c.hl||0)*2+c.pick*2,c]);
   }
-  return{res,notes,f,anyCountry,anyDate};
+  return{res,notes,f,anyCountry,anyPlace,anyDate};
 }
 let LAST=null;
 function snippet(c,f){
@@ -414,18 +424,29 @@ function render(){
   renderTour();facets();drawStrip();hash();
 }
 function facets(){
+  // every country and city stays in the list so chips never vanish; the number shows what the current search leaves in it
   const r=LAST.anyCountry,cnt={};r.forEach(c=>cnt[c.country]=(cnt[c.country]||0)+1);
-  const list=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
-  const chip=([k,n])=>`<button class="chip" data-c="${esc(k)}" aria-pressed="${S.country===k}"><span class="flag" aria-hidden="true">${flag(k)}</span>${esc(COUNTRY_NAME[k]||k)}<small>${n}</small></button>`;
+  const tot={};CL.forEach(c=>tot[c.country]=(tot[c.country]||0)+1);
+  const list=Object.keys(tot).sort((a,b)=>tot[b]-tot[a]).map(k=>[k,cnt[k]||0]);
+  const chip=([k,n])=>`<button class="chip${n||S.country===k?"":" zero"}" data-c="${esc(k)}" aria-pressed="${S.country===k}"><span class="flag" aria-hidden="true">${flag(k)}</span>${esc(COUNTRY_NAME[k]||k)}<small>${n}</small></button>`;
   $("countries").innerHTML=list.map(chip).join("");
   $("cbar").innerHTML=`<button class="chip" data-c="" aria-pressed="${!S.country}"><span class="flag" aria-hidden="true">🌍</span>All countries<small>${r.length}</small></button>`+list.map(chip).join("");
+  const pc={},pt={};LAST.anyPlace.forEach(c=>pc[c.o.label]=(pc[c.o.label]||0)+1);
+  CL.forEach(c=>{if(!S.country||c.country===S.country)pt[c.o.label]=(pt[c.o.label]||0)+1});
+  if(S.place&&!(S.place in pt))pt[S.place]=0;
+  const cities=Object.keys(pt).sort((a,b)=>(pc[b]||0)-(pc[a]||0)||pt[b]-pt[a]);
+  const pb=$("pbar");pb.hidden=cities.length<2;
+  pb.innerHTML=`<span class="plab">Cities</span><button class="chip" data-p="" aria-pressed="${!S.place}">All cities</button>`+cities.map(k=>{const n=pc[k]||0;return `<button class="chip${n||S.place===k?"":" zero"}" data-p="${esc(k)}" aria-pressed="${S.place===k}">${esc(k)}<small>${n}</small></button>`}).join("");
   const cb=$("calb");cb.setAttribute("aria-pressed",!!S.range);cb.textContent=S.range?"📅 "+(S.range[0]===S.range[1]?fmtDate(S.range[0]):fmtDate(S.range[0]).replace(/ \d{4}$/,"")+" to "+fmtDate(S.range[1])):"📅 Dates";
   const days=new Set(CL.map(c=>c.o.date)).size,secs=CL.reduce((s,c)=>s+c.dur,0);
   $("stats").innerHTML=`<div><b>${(window.COUNTRIES||[]).length}</b><span>countries</span></div><div><b>${CH.length}</b><span>stops</span></div><div><b>${days}</b><span>days filmed</span></div><div><b>${Math.round(secs/3600)}</b><span>hours</span></div>`;
 }
 const pickCountry=e=>{const b=e.target.closest(".chip");if(!b)return;S.country=S.country===b.dataset.c?"":b.dataset.c;S.shown=60;
+  if(S.place&&S.country&&!CL.some(c=>c.country===S.country&&c.o.label===S.place)){S.place="";G.sel=null}
   if(S.country){const c=CH.find(x=>x.country===S.country);if(c)flyTo(c.lon,c.lat)}render()};
 $("countries").onclick=pickCountry;$("cbar").onclick=pickCountry;
+$("pbar").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;S.place=S.place===b.dataset.p?"":b.dataset.p;G.sel=S.place||null;S.shown=60;
+  if(S.place){const c=CH.find(x=>x.label===S.place);if(c)flyTo(c.lon,c.lat)}render()};
 /* flag emoji from the two-letter country code in the data; the globe emoji for clips with no country */
 const CC={};
 const flag=name=>{const cc=CC[name];return cc&&/^[A-Za-z]{2}$/.test(cc)?String.fromCodePoint(...[...cc.toUpperCase()].map(ch=>127397+ch.charCodeAt(0))):"🌍"};
@@ -681,31 +702,51 @@ function drawGlobe(){
   const dpr=gdpr(),x=gc.getContext("2d"),W=gc.width/dpr,R=W*.44,cx=W/2,cy=W/2,C=colors();
   const css=n=>C[n.slice(2)];
   x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,W,W);x.translate(cx,cy);
-  x.fillStyle=css("--sea");x.beginPath();x.arc(0,0,R,0,7);x.fill();x.strokeStyle=css("--line");x.lineWidth=1;x.stroke();
+  const dark=matchMedia("(prefers-color-scheme: dark)").matches;
+  // soft atmosphere ring, then the ocean lit from the top left
+  let gr=x.createRadialGradient(0,0,R*.97,0,0,R*1.12);gr.addColorStop(0,dark?"rgba(255,138,79,.20)":"rgba(210,86,31,.16)");gr.addColorStop(1,"rgba(0,0,0,0)");
+  x.fillStyle=gr;x.beginPath();x.arc(0,0,R*1.12,0,7);x.fill();
+  gr=x.createRadialGradient(-R*.4,-R*.45,R*.1,0,0,R*1.05);gr.addColorStop(0,dark?"#222a33":"#f6fafc");gr.addColorStop(1,css("--sea"));
+  x.fillStyle=gr;x.beginPath();x.arc(0,0,R,0,7);x.fill();
+  // graticule every 30 degrees
+  x.save();x.beginPath();x.arc(0,0,R,0,7);x.clip();x.strokeStyle=css("--line");x.globalAlpha=.55;x.lineWidth=.6;
+  for(let lo=-180;lo<180;lo+=30){x.beginPath();let on=false;for(let la=-80;la<=80;la+=4){const [X,Y,v]=P(lo,la,R);if(!v){on=false;continue}x[on?"lineTo":"moveTo"](X,Y);on=true}x.stroke()}
+  for(let la=-60;la<=60;la+=30){x.beginPath();let on=false;for(let lo=-180;lo<=180;lo+=4){const [X,Y,v]=P(lo,la,R);if(!v){on=false;continue}x[on?"lineTo":"moveTo"](X,Y);on=true}x.stroke()}
+  x.restore();x.globalAlpha=1;
   if(rings){
     const sg=Math.sin(G.lon*R2),cg=Math.cos(G.lon*R2),sp0=Math.sin(G.lat*R2),cp0=Math.cos(G.lat*R2),HALF=Math.PI/2;
     const zOf=(a,b,s)=>sp0*s+cp0*(a*cg+b*sg);
     for(const r of rings){
       const c=r.cen;if(Math.acos(Math.max(-1,Math.min(1,zOf(c[0],c[1],c[2]))))-r.rad>HALF)continue;   // entirely on the far side
-      const p=r.g3;x.beginPath();let px=1e9,py=1e9,any=false,begun=false;
+      const p=r.g3;x.beginPath();let px=1e9,py=1e9,any=false,begun=false,cut=false;
       for(let i=0;i<p.length;i+=3){const a=p[i],b=p[i+1],s=p[i+2],m=a*cg+b*sg;
-        let X=(b*cg-a*sg)*R,Y=-(cp0*s-sp0*m)*R;if(sp0*s+cp0*m<=0){const k=Math.hypot(X,Y)||1;X=X/k*R;Y=Y/k*R}else any=true;
+        let X=(b*cg-a*sg)*R,Y=-(cp0*s-sp0*m)*R;if(sp0*s+cp0*m<=0){const k=Math.hypot(X,Y)||1;X=X/k*R;Y=Y/k*R;cut=true}else any=true;
         if(Math.abs(X-px)+Math.abs(Y-py)<.8)continue;px=X;py=Y;if(begun)x.lineTo(X,Y);else{x.moveTo(X,Y);begun=true}}
-      if(!any)continue;x.closePath();x.fillStyle=visited.has(r.name)?css("--visit"):css("--land");x.fill();
+      if(!any)continue;x.closePath();const vis=visited.has(r.name);x.fillStyle=vis?css("--visit"):css("--land");x.fill();
+      if(!cut){x.strokeStyle=vis?css("--accent"):css("--bg");x.globalAlpha=vis?.9:.7;x.lineWidth=vis?1.1:.6;x.stroke();x.globalAlpha=1}
     }
   }
+  // shading toward the edge makes it read as a ball, then a thin rim
+  gr=x.createRadialGradient(0,0,R*.62,0,0,R);gr.addColorStop(0,"rgba(0,0,0,0)");gr.addColorStop(1,dark?"rgba(0,0,0,.55)":"rgba(40,50,70,.22)");
+  x.fillStyle=gr;x.beginPath();x.arc(0,0,R,0,7);x.fill();x.strokeStyle=css("--line");x.lineWidth=1;x.stroke();
   for(let i=0;i<CH.length-1;i++){
     const a=CH[i],b=CH[i+1];const pts=[];for(let k=0;k<=20;k++)pts.push(slerp(a,b,k/20));
     const frac=G.play&&i===G.play.leg?G.play.t:1;
     x.lineWidth=G.play?(i<=G.play.leg?2:1):1.4;x.strokeStyle=css("--accent");x.globalAlpha=G.play&&i>G.play.leg?.18:.75;
     x.beginPath();let on=false;
     for(let k=0;k<=20;k++){if(k/20>frac&&G.play&&i===G.play.leg)break;const [X,Y,v]=P(pts[k].lon,pts[k].lat,R);if(!v){on=false;continue}x[on?"lineTo":"moveTo"](X,Y);on=true}
-    x.stroke();x.globalAlpha=1;
+    const lw=x.lineWidth,al=x.globalAlpha;x.lineWidth=lw+4;x.globalAlpha=al*.18;x.stroke();x.lineWidth=lw;x.globalAlpha=al;x.stroke();x.globalAlpha=1;
   }
   G.dots=[];
   CH.forEach((c,i)=>{const [X,Y,v]=P(c.lon,c.lat,R);if(!v)return;const r=3+Math.sqrt(c.secs/60)/2.4,sel=G.sel===c.label,reached=!G.play||i<=G.play.leg+(G.play.t>0?1:0);
     G.dots.push({X:X+cx,Y:Y+cy,r,c});x.globalAlpha=reached?1:.25;x.fillStyle=c.col;x.beginPath();x.arc(X,Y,r,0,7);x.fill();
     x.lineWidth=sel?3:1.5;x.strokeStyle=sel?css("--ink"):css("--bg");x.stroke();x.globalAlpha=1});
+  // city names, biggest stops first, skipping any that would overlap
+  x.font="600 11px system-ui,sans-serif";x.textBaseline="middle";const boxes=[];
+  for(const d of [...G.dots].sort((a,b)=>b.c.secs-a.c.secs)){const X=d.X-cx,Y=d.Y-cy;if(Math.hypot(X,Y)>R*.93)continue;
+    const w=x.measureText(d.c.label).width,bx=X+d.r+4,by=Y-7;
+    if(boxes.some(b=>bx<b[0]+b[2]&&bx+w>b[0]&&by<b[1]+b[3]&&by+14>b[1]))continue;boxes.push([bx,by,w,14]);
+    x.lineWidth=3;x.strokeStyle=css("--bg");x.globalAlpha=.85;x.strokeText(d.c.label,bx,Y);x.globalAlpha=1;x.fillStyle=css("--ink");x.fillText(d.c.label,bx,Y)}
   const pos=G.play?G.play.pos:null;
   if(pos){const [X,Y,v]=P(pos.lon,pos.lat,R);if(v){x.fillStyle=css("--ink");x.beginPath();x.arc(X,Y,6,0,7);x.fill();x.strokeStyle=css("--accent");x.lineWidth=3;x.stroke()}}
   x.translate(-cx,-cy);
