@@ -74,6 +74,10 @@ nav.tabs button[aria-current="page"] { background: var(--accent-soft); color: va
 .vbox { position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 16/9; max-height: 78vh; }
 .vbox video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; }
 .vbox video.back { visibility: hidden; }
+/* Slovenian subtitles, made on request (backend action "subs"): plain white text on a solid dark box, above the native controls */
+.slbtn { position: absolute; right: 8px; top: 8px; z-index: 3; background: rgba(0,0,0,.72); color: #fff; border: 1px solid rgba(255,255,255,.5); border-radius: 8px; padding: 6px 10px; font: 600 13px system-ui; cursor: pointer; }
+.slbtn[aria-pressed="true"] { background: #fff; color: #000; }
+.slsub { position: absolute; left: 6%; right: 6%; bottom: 14%; z-index: 2; text-align: center; color: #fff; background: rgba(0,0,0,.8); border-radius: 6px; padding: 6px 10px; font: 600 clamp(15px, 3.2vh, 26px)/1.3 system-ui, sans-serif; pointer-events: none; width: fit-content; margin: 0 auto; max-width: 88%; }
 /* edit preview: a Claude edit from the Library, cut to the second and framed 9:16 like the final reel */
 .vbox.edit { aspect-ratio: 9/16; width: min(100%, calc(82vh * 9 / 16)); max-height: none; margin: 0 auto; }
 .vbox.edit video { object-fit: cover; object-position: var(--x, 50%) 50%; }
@@ -216,6 +220,8 @@ input,select,textarea{font-size:16px}  /* stops iPhone Safari zooming in when a 
           <video id="va" playsinline preload="auto" controls></video>
           <video id="vb" class="back" playsinline preload="auto" muted></video>
           <button type="button" class="soundhint" id="soundhint" hidden>🔇 Tap for sound</button>
+          <button type="button" class="slbtn" id="slbtn" hidden aria-pressed="false" title="Slovenski podnapisi (prevod se naredi ob prvi zahtevi)">Slovenski podnapisi</button>
+          <div class="slsub" id="slsub" hidden aria-live="polite"></div>
           <span class="buf" id="buf" hidden>Loading…</span>
           <div class="ovl" id="ovl" hidden></div><span class="shotno" id="shotno" hidden></span>
         </div>
@@ -919,6 +925,32 @@ vids.forEach((v) => v.addEventListener("timeupdate", () => {
   const it = items[idx], id = cidOf(it); if (!id || viewed.has(id)) return; viewed.add(id);
   postBack({action: "view", clip: id, label: it.title});
 }));
+/* Slovenian subtitles on request: nothing is made until someone presses the button; the backend translates that clip's English transcript once and keeps it,
+   so the next person gets it straight away. Off again on every new clip. */
+const SUBS = {}; let subsOn = "";   // SUBS[clipId] = [[second, "slovenian line"], ...]; subsOn = the clip they are showing for
+$("slbtn").onclick = async () => {
+  const id = cidOf(items[idx]); if (!id) return;
+  if (subsOn === id) { subsOn = ""; paintSubs(); return; }
+  if (!SUBS[id]) {
+    $("slbtn").disabled = true; $("slbtn").textContent = "Pripravljam podnapise…";
+    try {
+      const r = await (await fetch(`${BACK}?action=subs&clip=${encodeURIComponent(id)}&token=${encodeURIComponent(token)}`)).json();
+      if (r.error) { toast(r.error); return; }
+      SUBS[id] = r.lines || [];
+    } catch (e) { toast("Podnapisov ni bilo mogoče pripraviti. Poskusi znova."); return; }
+    finally { $("slbtn").disabled = false; $("slbtn").textContent = "Slovenski podnapisi"; }
+  }
+  if (!SUBS[id].length) { toast("V tem posnetku ni govora."); return; }
+  subsOn = id; paintSubs();
+};
+function paintSubs() {
+  const id = cidOf(items[idx]), b = $("slbtn"), box = $("slsub");
+  b.hidden = !(BACK && token && id && view === "play"); b.setAttribute("aria-pressed", String(subsOn === id && !!id));
+  const L = subsOn === id ? SUBS[id] : null; let line = "";
+  if (L) { const t = va().currentTime || 0; for (let i = 0; i < L.length; i++) if (L[i][0] <= t + 0.3) { const end = Math.min(L[i + 1] ? L[i + 1][0] : 1e9, L[i][0] + 7); if (t < end) line = L[i][1]; } }
+  box.hidden = !line; box.textContent = line;
+}
+setInterval(paintSubs, 250);
 /* Family cuts: parts of a clip the owners hid. Everyone else's player jumps over them (a playback skip, not a deleted file). */
 const cutsFor = (id) => (FEED.cuts && FEED.cuts[id]) || [];
 const asFriend = () => !ME.owner || $("cut-preview").checked;

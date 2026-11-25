@@ -213,6 +213,7 @@ dialog{max-height:88dvh;overflow:auto}
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
     <input id="q" type="search" autocomplete="off" aria-label="Search all clips" placeholder="Try: Bangkok january, night, long clips in Vietnam, 25 nov, 3/12/2026, day 100">
     <button class="btn" type="button" id="clear">Clear</button>
+    <button class="btn" type="button" id="lang" title="Iskanje v slovenščini / search in English" aria-pressed="false">SL</button>
   </form>
   <div class="hints" id="hints"></div>
   <div id="notes"></div>
@@ -326,8 +327,18 @@ async function cget(k){try{const c=await caches.open(CACHE),r=await c.match("/_g
 async function cput(k,body,type){try{const c=await caches.open(CACHE);await c.put("/_gtx/"+encodeURIComponent(k),new Response(body,{headers:{"Content-Type":type}}))}catch(e){}}
 async function cprune(keep){try{const c=await caches.open(CACHE);for(const r of await c.keys()){const k=decodeURIComponent(new URL(r.url).pathname.slice(6));if(!keep.has(k))c.delete(r)}}catch(e){}}
 const idxKey=f=>`idx:${f.id}:${f.modifiedTime||""}`;
+/* Family cut: a relative gets explore_family_index.json (tools/family_filter.py), which does not contain the held-back clips at all. Which cut you are is
+   asked from the Journey backend BEFORE the index loads, and re-checked once the feed arrives. ?as=relatives previews it as Adam. */
+const BACK0="https://script.google.com/macros/s/AKfycbxi1DRHCwCYunhM6piP1alpcUsuljQ_ki4RkZD8dO1ll4XEi2iSli8uJMAfsyz03exm/exec";
+let CUT=qs.get("as")==="relatives"?"relatives":store.get("gtj-cut","");
+async function pickCut(){
+  if(TEST_API||qs.get("as")==="relatives"||!token)return;
+  try{const c=new AbortController();setTimeout(()=>c.abort(),5000);
+    const w=await (await fetch(`${BACK0}?action=whoami&token=${encodeURIComponent(token)}`,{signal:c.signal})).json();
+    if(w&&!w.error){CUT=w.aud==="relatives"?"relatives":"";store.set("gtj-cut",CUT)}}catch(e){}
+}
 async function findIndex(){
-  for(const name of ["explore_index.json","player_index.json"]){
+  for(const name of [...(CUT==="relatives"?["explore_family_index.json"]:[]),"explore_index.json","player_index.json"]){
     const found=await api("",{q:`name='${name}' and trashed=false`,fields:"files(id,parents,modifiedTime)",orderBy:"modifiedTime desc",pageSize:"5"});
     if(found.files?.[0])return found.files[0];
   }
@@ -340,7 +351,7 @@ async function listSheets(parent){
 }
 async function fetchIndex(f){
   const [data,sheets]=await Promise.all([api(f.id,{alt:"media"},"text"),listSheets(f.parents?.[0])]);
-  cput(idxKey(f),data,"application/json");store.set("gtx-last",{key:idxKey(f),sheets});
+  cput(idxKey(f),data,"application/json");store.set("gtx-last",{key:idxKey(f),sheets,cut:CUT});
   return{data:JSON.parse(data),sheets};
 }
 function useIndex(data,sheets){INDEX=data;SPR=new Map(sheets);prep();FIX.clear();vocab.v=null;setBackend(data.backend)}
@@ -348,7 +359,7 @@ function useIndex(data,sheets){INDEX=data;SPR=new Map(sheets);prep();FIX.clear()
 let BACK="",FEED={comments:{},notes:{}},FEEDP=null;
 /* Audiences: each clip is for everyone (default), friends (friends + family) or family only; each viewer is friends until an owner makes them family.
    This hides things in the page, it is not a lock: the clips are still shared Drive files. */
-const LVL={everyone:0,friends:1,family:2};
+const LVL={everyone:0,friends:1,family:2,relatives:1};   // relatives = the clean family cut: sees friends' clips only, from a smaller index (explore_family_index.json)
 let CAUD=store.get("gtj-caud",{}),ME=store.get("gtj-me",{aud:"friends",digest:false});   // CAUD {clipId:"friends"|"family"}; ME this viewer
 const myLvl=()=>OWNER?9:LVL[qs.get("owner")==="0"?(qs.get("as")||"friends"):ME.aud]??1;   // ?owner=0&as=family previews a family member
 const canSee=c=>(LVL[CAUD[c.id]||"everyone"]??0)<=myLvl();
@@ -360,6 +371,8 @@ const tk=()=>encodeURIComponent(token||"");
 async function loadFeed(){try{
   if(!OWNER&&qs.get("owner")!=="0"){const w=await (await fetch(`${BACK}?action=whoami&token=${tk()}`)).json();if(w.owner){OWNER=true;prep();buildDays();ownerBar()}}
   const r=await (await fetch(`${BACK}?action=feed&token=${tk()}`)).json();if(r.error)return;FEED=r;FEED.comments=FEED.comments||{};FEED.notes=FEED.notes||{};
+  if(!OWNER&&!TEST_API&&qs.get("as")!=="relatives"&&r.me){const want=r.me.aud==="relatives"?"relatives":"";   // Adam changed which cut this person gets: swap the index
+    if(want!==CUT){CUT=want;store.set("gtj-cut",CUT);store.set("gtx-last",null);loadIndex().then(()=>{tourDone=false;sprUrls.clear();buildDays();render()}).catch(()=>{})}}
   HASME=!!r.me;const sig=JSON.stringify([CAUD,ME.aud]);CAUD=r.aud||{};if(r.me)ME={aud:r.me.aud||"friends",digest:!!r.me.digest};store.set("gtj-caud",CAUD);store.set("gtj-me",ME);digBtn();
   if(JSON.stringify([CAUD,ME.aud])!==sig){vocab.v=null;prep();buildDays()}applyNotes()}catch(e){}}
 const MARK=/\[with ([^\]]+)\]/g;
@@ -371,7 +384,9 @@ function applyNotes(){let ch=false;for(const c of INDEX.clips){const n=FEED.note
 const postBack=d=>fetch(BACK,{method:"POST",mode:"no-cors",body:JSON.stringify({...d,token})}).catch(()=>{});
 const noteLine=c=>{const n=FEED.notes[c.id],k=(FEED.comments[c.id]||[]).length;return (OWNER&&CAUD[c.id]?`<span class="cm">${CAUD[c.id]==="family"?"👪 Family only":"👥 Friends + family"}</span>`:"")+(n&&String(n.desc||"").replace(MARK,"").trim()?`<em class="note">${esc(String(n.desc).replace(MARK,"").trim().slice(0,90))}</em>`:"")+(k?`<span class="cm">💬 ${k}</span>`:"")};
 async function loadIndex(){
-  const last=store.get("gtx-last",null),hit=last&&await cget(last.key);
+  await pickCut();
+  let last=store.get("gtx-last",null);if(last&&(last.cut||"")!==CUT)last=null;   // the saved copy is for the other cut
+  const hit=last&&await cget(last.key);
   if(hit){   // show the saved copy now; swap in a newer one if Drive has it
     try{useIndex(await hit.json(),last.sheets);
       findIndex().then(async f=>{if(idxKey(f)===last.key)return;const n=await fetchIndex(f);useIndex(n.data,n.sheets);sprUrls.clear();tourDone=false;buildDays();render();keepCache()}).catch(()=>{});
@@ -514,8 +529,36 @@ function fixWord(v){
   FIX.set(v,out);return out;
 }
 /* One pass gives the results plus what the country chips (all countries) and date strip (all dates) need. */
+/* Slovenian search: the clips are searched in English, so a Slovenian query is turned into English first. Common words come from the small list
+   below (instant, works offline); anything else is asked once from the Journey backend (Google's translator, cached there), so "plažo" or "sladoled"
+   also work. Numbers, dates and words that already match a clip are left alone, so "25 nov" and "tuk tuk" still behave. */
+let LANG=store.get("gtj-lang",(navigator.language||"").toLowerCase().startsWith("sl")?"sl":"en");
+const deacc=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/đ/g,"d");
+const SLD=Object.fromEntries(`morje=sea|plaza=beach|plaze=beaches|hrana=food|jedi=food|noc=night|nocni=night|dan=day|mesto=city|trznica=market|tempelj=temple|templji=temples|dez=rain|sonce=sun|zahod=sunset|vlak=train|letalo=plane|letalisce=airport|avtobus=bus|motor=scooter|skuter=scooter|kolo=bike|reka=river|gore=mountain|gora=mountain|otok=island|otoki=islands|voda=water|slap=waterfall|ulica=street|ulice=street|kosilo=lunch|vecerja=dinner|zajtrk=breakfast|kava=coffee|sladoled=ice cream|pivo=beer|riz=rice|juha=soup|meso=meat|ribe=fish|sadje=fruit|soba=room|prijatelji=friends|prijatelj=friend|sestra=sister|druzina=family|mama=mum|zdravo=hello|hvala=thanks|dolgo=long|dolgi=long|kratko=short|kratki=short|tajska=thailand|vietnam=vietnam|kitajska=china|japonska=japan|tokio=tokyo|slovenija=slovenia|nakupovanje=shopping|potovanje=trip|vozim=driving|hoja=walking|ples=dance|glasba=music|koncert=concert|slon=elephant|sloni=elephants|opice=monkeys|opica=monkey|zivali=animals|cesta=road|most=bridge|nebotocnik=skyscraper|park=park|vrt=garden|ladja=boat|izlet=trip|sprehod=walk|veter=wind|vroce=hot|hladno=cold|smesno=funny|lepo=beautiful|zabava=fun`.split("|").map(p=>p.split("=")));
+const TRC=new Map();   // word the dictionary doesn't know -> English from the backend
+function slQ(q){
+  const unk=[],text=q.split(/(\s+)/).map(t=>{if(!t.trim())return t;const k=deacc(t);
+    if(SLD[k]!==undefined)return SLD[k];
+    if(/\d/.test(k)||k.length<4)return t;
+    if(TRC.has(k))return TRC.get(k);
+    if(CL.some(c=>c.o.hay.includes(k)||c.o.tx.includes(k)))return t;
+    unk.push([k,t.toLowerCase()]);return t}).join("");
+  return{text,unk};
+}
+let trT=null;
+function slLookup(){   // after typing stops: ask the backend about words nobody knows yet, then search again
+  clearTimeout(trT);if(LANG!=="sl"||!BACK||!token)return;
+  const unk=slQ(S.q).unk.filter(w=>!TRC.has(w[0])).slice(0,3);if(!unk.length)return;
+  trT=setTimeout(async()=>{   // the word goes with its accents (plažo, not plazo): that is what the translator needs
+    await Promise.all(unk.map(async([k,w])=>{try{const r=await (await fetch(`${BACK}?action=tr&text=${encodeURIComponent(w)}&token=${tk()}`)).json();TRC.set(k,String(r.en||w).toLowerCase())}catch(e){TRC.set(k,k)}}));
+    FIX.clear();render()},450);
+}
+function langUI(){const b=$("lang");b.textContent=LANG==="sl"?"SL":"EN";b.setAttribute("aria-pressed",String(LANG==="sl"));
+  $("q").placeholder=LANG==="sl"?"Poskusi: morje, hrana, tržnica, noč, Tajska, 25. nov":"Try: Bangkok january, night, long clips in Vietnam, 25 nov, 3/12/2026, day 100";
+  $("clear").textContent=LANG==="sl"?"Počisti":"Clear"}
 function run(){
-  let f=parse(S.q);const notes=[...parse.notes];
+  let f=parse(LANG==="sl"&&S.q?slQ(S.q).text:S.q);const notes=[...parse.notes];
+  if(LANG==="sl"&&S.q){const t=slQ(S.q).text;if(deacc(t)!==deacc(S.q))notes.push(`Iskanje: «${S.q}» → ${t}`)}
   f=f.map(x=>{if(x.k!=="txt"||x.v.length<4||/^\d/.test(x.v))return x;
     const w=fixWord(x.v);if(w!==x.v){notes.push(`No match for "${x.v}", showing "${w}".`);return{k:"txt",v:w}}return x});
   const res=[],anyCountry=[],anyPlace=[],anyDate=new Set();
@@ -818,10 +861,10 @@ function openMum(){
 }
 /* People & emails (owner): who has signed in, family or friend, who gets the new-clips email. */
 async function openPeople(){const r=await ownerGet("viewers");if(!r)return;
-  const row=v=>`<tr data-e="${esc(v.email)}" data-n="${esc(v.name||"")}"><td>${esc(v.name||"")}<br><small style="color:var(--mute)">${esc(v.email)}</small></td><td>${v.owner?"Owner":`<select data-f="aud"><option value="friends"${v.audience==="family"?"":" selected"}>Friend</option><option value="family"${v.audience==="family"?" selected":""}>Family</option></select>`}</td><td style="text-align:center"><input type="checkbox" data-f="dig"${v.digest?" checked":""} aria-label="Emails on"></td></tr>`;
+  const row=v=>`<tr data-e="${esc(v.email)}" data-n="${esc(v.name||"")}"><td>${esc(v.name||"")}<br><small style="color:var(--mute)">${esc(v.email)}</small></td><td>${v.owner?"Owner":`<select data-f="aud"><option value="friends"${v.audience==="family"||v.audience==="relatives"?"":" selected"}>Friend</option><option value="family"${v.audience==="family"?" selected":""}>Family (sees everything)</option><option value="relatives"${v.audience==="relatives"?" selected":""}>Family (clean cut)</option></select>`}</td><td style="text-align:center"><input type="checkbox" data-f="dig"${v.digest?" checked":""} aria-label="Emails on"></td></tr>`;
   const d=dlg(`<h3>👪 People &amp; emails</h3><p class="sm">Everyone who has signed in appears here as a friend. Family see clips marked family only. A tick means they get an email when new clips appear.</p>
     <table><tr><td><b>Person</b></td><td><b>Is a</b></td><td style="text-align:center"><b>Emails</b></td></tr>${r.viewers.map(row).join("")||"<tr><td colspan=3>Nobody yet.</td></tr>"}</table>
-    <p><b>Add someone</b> (for example Mum, before she signs in)<br><input id="pe" type="email" placeholder="her@gmail.com" size="22"> <input id="pn" placeholder="Name" size="9"> <select id="pa"><option value="family">Family</option><option value="friends">Friend</option></select> <button class="btn" id="pb">Add, emails on</button></p>
+    <p><b>Add someone</b> (for example Mum, before she signs in)<br><input id="pe" type="email" placeholder="her@gmail.com" size="22"> <input id="pn" placeholder="Name" size="9"> <select id="pa"><option value="relatives">Family (clean cut)</option><option value="family">Family (sees everything)</option><option value="friends">Friend</option></select> <button class="btn" id="pb">Add, emails on</button></p>
     <p><button class="btn pri" id="pd">✉ Send the email now</button> <span class="sm">Sends new clips to everyone with emails on, without the 12 hour wait.</span></p>`);
   const send=tr=>postBack({action:"viewer",email:tr.dataset.e,name:tr.dataset.n,audience:tr.querySelector('[data-f="aud"]')?.value||"family",digest:tr.querySelector('[data-f="dig"]').checked});
   d.addEventListener("change",e=>{const tr=e.target.closest("tr[data-e]");if(tr){send(tr);toast("Saved.")}});
@@ -904,8 +947,10 @@ $("statsave").onclick=()=>$("statc").toBlob(b=>{const a=document.createElement("
 
 /* ---------- search box, shareable state ---------- */
 let qT=null;
-$("q").oninput=e=>{S.q=e.target.value;S.shown=60;clearTimeout(qT);qT=setTimeout(render,S.q.length>2?90:160)};
-$("sform").onsubmit=e=>e.preventDefault();
+$("q").oninput=e=>{S.q=e.target.value;S.shown=60;clearTimeout(qT);qT=setTimeout(render,S.q.length>2?90:160);slLookup()};
+$("sform").onsubmit=e=>{e.preventDefault();slLookup()};
+$("lang").onclick=()=>{LANG=LANG==="sl"?"en":"sl";store.set("gtj-lang",LANG);langUI();FIX.clear();render();slLookup()};
+langUI();
 $("clear").onclick=()=>{Object.assign(S,{q:"",country:"",place:"",range:null,cell:"",picks:false,hearts:false,shown:60});$("q").value="";G.sel=null;render()};
 function hash(){try{const h=new URLSearchParams();if(S.q)h.set("q",S.q);if(S.country)h.set("c",S.country);if(S.place)h.set("p",S.place);if(S.range)h.set("r",S.range.join("_"));history.replaceState(null,"",location.pathname+location.search+(h.toString()?"#"+h:""))}catch(e){}}
 function readHash(){const h=new URLSearchParams(location.hash.slice(1));S.q=h.get("q")||"";S.country=h.get("c")||"";S.place=h.get("p")||"";S.range=h.get("r")?h.get("r").split("_"):null;$("q").value=S.q;G.sel=S.place||null;return h}
