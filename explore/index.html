@@ -1201,7 +1201,7 @@ $("addb").onclick=openAdd;
 let accessPoll=null;
 async function noAccess(){
   $("app").hidden=false;
-  let email="";try{const t=await fetch("https://oauth2.googleapis.com/tokeninfo",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"access_token="+encodeURIComponent(token||"")}).then(r=>r.json());email=t.email||""}catch(e){}
+  let email="";try{email=(await api("../about",{fields:"user(emailAddress)"})).user?.emailAddress||""}catch(e){}
   const show=(msg,extra="")=>{$("notes").innerHTML=`<div class="note" id="accessnote"><b>Almost there.</b><br>${msg}${email?`<br><small style="color:var(--mute)">Signed in as ${esc(email)}</small>`:""}${extra}<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="otheracct">Use a different Google account</button></div></div>`;
     $("otheracct").onclick=()=>{try{google.accounts.oauth2.revoke(token,()=>{})}catch(e){}try{sessionStorage.removeItem("gtp-token")}catch(e){}token=null;
       initGoogle();try{tokenClient.requestAccessToken({prompt:"select_account"})}catch(e){location.reload()}}};
@@ -1229,7 +1229,7 @@ async function diagInfo(){
     audience_tags:Object.keys(CAUD||{}).length,hidden_in_browser:HIDE.size,
     index_built:INDEX?.built||"",hash:location.hash.slice(0,60),online:navigator.onLine};
   try{const t=await fetch("https://oauth2.googleapis.com/tokeninfo",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"access_token="+encodeURIComponent(token||"")}).then(r=>r.json());
-    d.signed_in_as=t.email||"(unknown)";d.drive_permission=String(t.scope||"").includes("drive")?"granted":"MISSING";d.token_error=t.error||""}catch(e){d.token_error="check failed"}
+    try{d.signed_in_as=(await api("../about",{fields:"user(emailAddress)"})).user?.emailAddress||"(unknown)"}catch(e){d.signed_in_as="(unknown)"}d.drive_permission=String(t.scope||"").includes("drive")?"granted":"MISSING";d.token_error=t.error||""}catch(e){d.token_error="check failed"}
   try{const r=await fetch(API+"?"+new URLSearchParams({supportsAllDrives:"true",q:"name='explore_index.json' and trashed=false",fields:"files(id,modifiedTime)",pageSize:"5"}),{headers:{Authorization:"Bearer "+token}});
     d.drive_status=r.status;const j=await r.json().catch(()=>({}));d.index_files_visible=(j.files||[]).map(f=>f.modifiedTime).join(" | ")}catch(e){d.drive_status="failed: "+e.message}
   return d;
@@ -1277,3 +1277,4 @@ else{$("welcome").hidden=false;$("signin").hidden=false;initGoogle()}
 </script>
 </body>
 </html>
+                                       
