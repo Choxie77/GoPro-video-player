@@ -11,6 +11,9 @@
   const LABEL = {
     "warning": "Warning", "aspirational-future": "“One day you’ll…”", "question": "Question", "pov": "POV", "day-journal": "Day journal",
     "challenge-or-itinerary": "Challenge or itinerary", "destination-declaration": "“I’m in…”", "danger-awe": "Danger or awe", "pure-visual": "Pure visual", "other": "Other",
+    "budget-reveal": "Budget reveal", "before-you-go": "Before you go", "worth-it": "Is it worth it?", "unexpected": "“Didn’t expect…”", "sign-to-go": "“Your sign to go”",
+    "culture-shock": "Culture shock", "best-food": "Best food", "ride-along": "Ride-along", "solo-truth": "Solo travel truth", "speed-recap": "Speed recap",
+    "reveal-payoff": "Reveal payoff", "at-night": "At night",
   };
   const label = (k) => LABEL[k] || k;
   const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n ?? "");
@@ -120,7 +123,7 @@
     if (typeof savePost !== "function" || typeof canSave !== "function" || !canSave()) return toast("Sign in and wait for your library to load first", true);
     const a = Math.max(0, best.c.start_s || 0), b = Math.min(c.dur || a + 3, +(a + 3).toFixed(1));
     const line = fill(templateOf(type), c, true);
-    const why = `Hook pattern: ${label(type)}. Seen on @${ex.handle}: ${ex.hook_text || "no text, the shot is the hook"}.`;
+    const why = ex && ex.handle ? `Hook pattern: ${label(type)}. Seen on @${ex.handle}: ${ex.hook_text || "no text, the shot is the hook"}.` : `Hook format: ${label(type)}.`;
     const id = await savePost(null, {...newPostSeed(c, [{clip: c.id, a, b, role: "hook", note: "Opener: " + why}]), kind: "reel", status: "clips",
       hook: line, caption: "", notes: why, brief: typeof briefDefaults === "function" ? briefDefaults("reel") : undefined});
     if (id) { toast("Post started with this hook as the opener"); location.hash = "#posts"; }
@@ -174,11 +177,12 @@
     return el("article", {className: "gtat-card"},
       el("div", {className: "gtat-head"},
         el("span", {className: "gtat-rank", textContent: "#" + (i + 1)}),
-        el("div", {}, el("h3", {className: "gtat-type", textContent: label(t.name)}), el("span", {className: "gtat-n", textContent: `${t.n} viral reel${t.n > 1 ? "s" : ""}`})),
-        el("div", {className: "gtat-mult", title: "Median views compared with each creator's usual reel"}, el("b", {textContent: `${Math.round(t.median)}×`}), el("span", {textContent: "typical views"}))),
+        el("div", {}, el("h3", {className: "gtat-type", textContent: label(t.name)}), el("span", {className: "gtat-n", textContent: t.formula ? "Hook format" : `${t.n} viral reel${t.n > 1 ? "s" : ""}`})),
+        t.formula ? el("div", {className: "gtat-mult", title: "A proven format from the niche. No measured numbers."}, el("b", {textContent: "Format"}), el("span", {textContent: "not measured"}))
+          : el("div", {className: "gtat-mult", title: "Median views compared with each creator's usual reel"}, el("b", {textContent: `${Math.round(t.median)}×`}), el("span", {textContent: "typical views"}))),
       el("div", {className: "gtat-bar", "aria-hidden": "true"}, el("i", {style: `width:${Math.max(4, (t.median / top) * 100)}%`})),
       lineEl(fill(t.template, c)),
-      el("div", {}, el("p", {className: "gtat-sub", textContent: "Seen on"}),
+      t.formula ? el("p", {className: "gtat-note", style: "margin:0", textContent: "A format used a lot in travel reels. It has no measured views here, so treat it as something to test."}) : el("div", {}, el("p", {className: "gtat-sub", textContent: "Seen on"}),
         el("ul", {className: "gtat-exs"}, ex.map((r) => el("li", {className: "gtat-ex"},
           el("a", {href: r.url, target: "_blank", rel: "noopener noreferrer", textContent: `@${r.handle}`}),
           el("span", {className: "v", textContent: `${fmt(r.views)} views`}),
@@ -251,7 +255,7 @@
         el("div", {className: "gtat-stats"},
           el("div", {className: "gtat-stat"}, el("b", {textContent: String(data.viral_count)}), el("span", {textContent: "viral reels studied"})),
           el("div", {className: "gtat-stat"}, el("b", {textContent: String(data.types.length)}), el("span", {textContent: "hook types"})),
-          el("div", {className: "gtat-stat" + (data.clips_considered < 100 ? " flag" : "")}, el("b", {textContent: String(data.clips_considered)}), el("span", {textContent: data.clips_considered < 100 ? "of your clips scanned so far" : "of your clips scanned"}))),
+          el("div", {className: "gtat-stat" + (data.clips_considered < (data.clips_total || 100) / 2 ? " flag" : "")}, el("b", {textContent: String(data.clips_considered)}), el("span", {textContent: `of ${data.clips_total || "your"} clips scanned${data.clips_considered < (data.clips_total || 100) ? " so far" : ""}`}))),
         el("p", {className: "gtat-note", textContent: `Updated ${String(data.generated).slice(0, 10)}. Numbers are how far each reel beat its creator’s usual views. Small sample, so treat each hook as something to test.`}),
         el("div", {className: "gtat-grid"}, ...[...data.types].sort((x, y) => (+y.median || 0) - (+x.median || 0)).map(card)),
         ownSection(rows));
