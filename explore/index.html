@@ -119,6 +119,8 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:10px;font-size:14px;z-index:9}
 .card .ic button[data-act=hide]{background:#a33}
 #ownerbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:8px 12px;font-size:13px;box-shadow:0 6px 24px #0008;max-width:calc(100vw - 24px)}#ownerbar .btn{padding:4px 10px;font-size:12.5px}
+body:has(#ownerbar){padding-bottom:170px}
+body:has(#ownerbar) .toast{bottom:auto;top:16px;z-index:60}
 .card .note{display:block;font-style:normal;color:var(--mute);font-size:12px;margin-top:2px}.card .cm{display:inline-block;margin-top:2px;font-size:12px;color:var(--accent)}
 #od{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;max-width:min(680px,94vw);width:100%;max-height:86vh;padding:16px}#od::backdrop{background:#000a}#od h3{margin:0 0 8px}#od table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px}#od td{padding:3px 6px;border-bottom:1px solid var(--line)}#od td:last-child{text-align:right;color:var(--mute)}#od .cmt{border-bottom:1px solid var(--line);padding:8px 0}#od .cmt small{color:var(--mute)}
 </style>
