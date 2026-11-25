@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#0e0e0c">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<title>Explore the Journey</title>
+<title>Journey · Friends & Family</title>
 <link rel="preconnect" href="https://www.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://accounts.google.com">
 <link rel="preload" href="countries.json" as="fetch" crossorigin>
@@ -125,10 +125,11 @@ body:has(#ownerbar) .toast{bottom:auto;top:16px;z-index:60}
 #od{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;max-width:min(680px,94vw);width:100%;max-height:86vh;padding:16px}#od::backdrop{background:#000a}#od h3{margin:0 0 8px}#od table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px}#od td{padding:3px 6px;border-bottom:1px solid var(--line)}#od td:last-child{text-align:right;color:var(--mute)}#od .cmt{border-bottom:1px solid var(--line);padding:8px 0}#od .cmt small{color:var(--mute)}
 .card.tsel{outline:3px solid var(--accent);outline-offset:-3px}
 #tagbar{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);z-index:51;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:8px 12px;font-size:13px;box-shadow:0 6px 24px #0008;max-width:calc(100vw - 24px)}#tagbar .btn{padding:4px 10px;font-size:12.5px}#tagbar input{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:4px 8px}
+.ff{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 8px;margin-left:8px;white-space:nowrap}
 </style>
 </head>
 <body>
-<header><b>Explore the Journey</b><span class="sp"></span>
+<header><b>Explore the Journey</b><span class="ff">Friends &amp; Family</span><span class="sp"></span>
   <button class="btn" id="statb" hidden>Trip stats</button><button class="btn" id="pickb" hidden>My picks <span id="pickn"></span></button>
   <span id="who" style="color:var(--mute);font-size:13px"></span><button class="btn" id="signin" hidden>Sign in with Google</button></header>
 
