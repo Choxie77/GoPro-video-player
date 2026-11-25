@@ -353,13 +353,14 @@ let CAUD=store.get("gtj-caud",{}),ME=store.get("gtj-me",{aud:"friends",digest:fa
 const myLvl=()=>OWNER?9:LVL[qs.get("owner")==="0"?(qs.get("as")||"friends"):ME.aud]??1;   // ?owner=0&as=family previews a family member
 const canSee=c=>(LVL[CAUD[c.id]||"everyone"]??0)<=myLvl();
 function setBackend(u){BACK=u||"";store.set("gtj-backend",BACK);FEEDP=BACK?loadFeed():null}
-function digBtn(){const b=$("digb");if(!b)return;b.hidden=!(BACK&&token);b.textContent=ME.digest?"🔔 Emails on":"🔔 Email me new clips";b.title=ME.digest?"You get an email when new clips are added. Press to stop.":"Get an email when new clips are added"}
+let HASME=false;   // true once the backend knows audiences and emails (older backends hide those buttons)
+function digBtn(){const b=$("digb");if(!b)return;b.hidden=!(BACK&&token&&HASME);b.textContent=ME.digest?"🔔 Emails on":"🔔 Email me new clips";b.title=ME.digest?"You get an email when new clips are added. Press to stop.":"Get an email when new clips are added"}
 $("digb").onclick=()=>{ME.digest=!ME.digest;store.set("gtj-me",ME);postBack({action:"digest_pref",on:ME.digest});digBtn();toast(ME.digest?"Done. You'll get an email when there are new clips.":"Emails turned off.")}
 const tk=()=>encodeURIComponent(token||"");
 async function loadFeed(){try{
   if(!OWNER&&qs.get("owner")!=="0"){const w=await (await fetch(`${BACK}?action=whoami&token=${tk()}`)).json();if(w.owner){OWNER=true;prep();buildDays();ownerBar()}}
   const r=await (await fetch(`${BACK}?action=feed&token=${tk()}`)).json();if(r.error)return;FEED=r;FEED.comments=FEED.comments||{};FEED.notes=FEED.notes||{};
-  const sig=JSON.stringify([CAUD,ME.aud]);CAUD=r.aud||{};if(r.me)ME={aud:r.me.aud||"friends",digest:!!r.me.digest};store.set("gtj-caud",CAUD);store.set("gtj-me",ME);digBtn();
+  HASME=!!r.me;const sig=JSON.stringify([CAUD,ME.aud]);CAUD=r.aud||{};if(r.me)ME={aud:r.me.aud||"friends",digest:!!r.me.digest};store.set("gtj-caud",CAUD);store.set("gtj-me",ME);digBtn();
   if(JSON.stringify([CAUD,ME.aud])!==sig){vocab.v=null;prep();buildDays()}applyNotes()}catch(e){}}
 const MARK=/\[with ([^\]]+)\]/g;
 function applyNotes(){let ch=false;for(const c of INDEX.clips){const n=FEED.notes[c.id];if(c._t0===undefined){c._t0=c.title;c._d0=c.desc;c._g0=c.tags||[];c._p0=c.pp||[]}
@@ -760,6 +761,7 @@ function tagBar(){let b=document.getElementById("tagbar");if(!TAG.on){b&&b.remov
       else if(k==="clear")TAG.sel.clear();
       else if(k==="done"){TAG.on=false;TAG.sel.clear()}
       else if(k.startsWith("aud-")){const ids=[...TAG.sel],lv=k.slice(4);if(!ids.length)return toast("Tap some clips first.");
+        if(!HASME)return toast("Update the Apps Script first (new version of journey_backend.gs), then audiences will save.");
         for(const id of ids){if(lv==="everyone")delete CAUD[id];else CAUD[id]=lv}store.set("gtj-caud",CAUD);postBack({action:"audience",clips:ids,level:lv});
         TAG.sel.clear();prep();buildDays();render();toast(`${ids.length} clip${ids.length===1?"":"s"} now ${lv==="family"?"family only":lv==="friends"?"for friends and family":"for everyone"}.`)}
       else{const name=(document.getElementById("tagname").value||"").trim();if(!name)return toast("Type who is in these clips.");const ids=[...TAG.sel];if(!ids.length)return toast("Tap some clips first.");
@@ -792,7 +794,8 @@ function mumText(o){
   const where=pl.length<=1?pl[0]||"the trip":pl.length===2?`${pl[0]} and ${pl[1]}`:`${pl[0]}, ${pl[1]} and ${pl.length-2} other place${pl.length===3?"":"s"}`;
   const star=fresh.slice().sort((a,b)=>score(b)-score(a))[0],t=star&&star.title?String(star.title).slice(0,60):"";
   const link=o.to==="clip"&&star?`${SHORT}#clip=${star.id}`:SHORT;
-  const n=fresh.length,text=isNew?`Hi ${o.name||"Mum"}! ${n} new clip${n===1?"":"s"} from ${where} ${n===1?"is":"are"} up${t?`, including "${t}"`:""}. Have a look: ${link}`
+  const days=fresh.map(c=>c.t.slice(0,10)).sort(),sd=x=>fmtDate(x).replace(/ \d{4}$/,""),when=!days.length?"":days[0]===days.at(-1)?sd(days[0]):Date.parse(days.at(-1))-Date.parse(days[0])<=7*864e5?`${sd(days[0])} to ${sd(days.at(-1))}`:"";
+  const n=fresh.length,text=isNew?`Hi ${o.name||"Mum"}! ${n} new clip${n===1?"":"s"} from ${where}${when?` (${when})`:""} ${n===1?"is":"are"} up${t?`, including "${t}"`:""}. Have a look: ${link}`
     :`Hi ${o.name||"Mum"}! Here are some of my favourite moments from the trip so far${t?`, like "${t}"`:""}. Have a look: ${link}`;
   return{text,newest,n:isNew?n:0};
 }
