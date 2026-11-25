@@ -128,7 +128,8 @@ kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 
 .note-desc{margin:0;padding:10px 12px;background:var(--panel);border-left:3px solid var(--accent);border-radius:8px}
 .cmt{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px}.cmt small{color:var(--muted)}.cmt a{color:var(--accent);cursor:pointer}
 .cform{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.cform input[type=text]{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0}
-#cname{width:140px}#ctext{flex:1;min-width:180px}
+#ctext{flex:1;min-width:180px}
+.cutp{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:8px;max-width:760px}.cutp .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.cutp input[type=text]{width:72px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;text-align:center}.cutp .cutl{display:flex;flex-wrap:wrap;gap:6px}.cutp .cutl span{background:var(--accent-soft);border-radius:999px;padding:2px 4px 2px 10px;font-size:13px}.cutp .cutl button{border:0;background:transparent;color:var(--ink);cursor:pointer}
 </style>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -219,12 +220,22 @@ kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 
           <p class="msg muted" id="s-msg" role="status"></p>
         </div>
         <div style="display:grid;gap:4px"><p class="title" id="title"></p><p class="info muted mono" id="info"></p></div>
+        <section id="cutp" class="cutp" hidden>
+          <div class="row"><b>✂ Hide a part from friends and family</b><span class="muted" style="font-size:13px">only you two see it; everyone else skips straight over it</span></div>
+          <div class="row">
+            <button class="btn" id="cut-start" title="Hide from the start up to the current position">Start → now</button>
+            <button class="btn" id="cut-end" title="Hide from the current position to the end">Now → end</button>
+            <span class="muted">or from <input type="text" id="cut-a" value="0:00" aria-label="From"> to <input type="text" id="cut-b" value="0:10" aria-label="To"></span>
+            <button class="btn" id="cut-go">Hide this part</button>
+            <label class="muted"><input type="checkbox" id="cut-preview"> Preview as a friend</label>
+          </div>
+          <div class="cutl" id="cutl"></div>
+        </section>
         <section id="cmts" class="cmts" hidden>
           <p class="note-desc" id="cnote" hidden></p>
           <h3>Comments <span class="muted" id="ccount"></span></h3>
           <div id="clist"></div>
           <form id="cform" class="cform">
-            <input type="text" id="cname" placeholder="Your name" maxlength="40" aria-label="Your name">
             <input type="text" id="ctext" placeholder="Write a comment about this moment…" maxlength="1000" aria-label="Comment">
             <label class="muted"><input type="checkbox" id="cat" checked> at <span id="catt">0:00</span></label>
             <button class="btn primary" type="submit">Post</button>
@@ -379,7 +390,7 @@ function show(v) {
   if (v !== "multi") tiles.forEach((t) => t.v.pause());
   if (v === "lib") renderLib();
   if (v === "multi" && !tiles.length && !show.noAuto) autoMulti();
-  if (typeof paintComments === "function") paintComments();
+  if (typeof paintComments === "function") { paintComments(); paintCuts(); }
 }
 /* Multi-view should never open empty: use the picked clips, else the queue, else four random clips from the library. */
 function randomItems(n) {
@@ -806,10 +817,19 @@ async function signedIn() {
 }
 /* ================= COMMENTS, notes and view counts (the Journey backend; only when Explore has handed over its address) ================= */
 const BACK = store.get("gtj-backend", "");
-let FEED = {comments: {}, notes: {}}; const viewed = new Set();
+let FEED = {comments: {}, notes: {}, cuts: {}}; const viewed = new Set();
 const cidOf = (it) => it && (it.cid || it.clip?.id || "");
-const myName = () => store.get("gtj-name", "");
-async function loadFeed() { if (!BACK) return; try { FEED = await (await fetch(BACK + "?action=feed")).json(); FEED.comments = FEED.comments || {}; FEED.notes = FEED.notes || {}; } catch (e) {} paintComments(); }
+let ME = {owner: false, name: ""};
+async function loadFeed() {
+  if (!BACK || !token) return;
+  try {
+    const t = encodeURIComponent(token);
+    if (!ME.name) { const w = await (await fetch(`${BACK}?action=whoami&token=${t}`)).json(); if (!w.error) ME = w; }
+    const r = await (await fetch(`${BACK}?action=feed&token=${t}`)).json(); if (!r.error) { FEED = r; FEED.comments = FEED.comments || {}; FEED.notes = FEED.notes || {}; FEED.cuts = FEED.cuts || {}; }
+  } catch (e) {}
+  paintComments(); paintCuts();
+}
+const postBack = (d) => fetch(BACK, {method: "POST", mode: "no-cors", body: JSON.stringify({...d, token})}).catch(() => {});
 function paintComments() {
   const it = items[idx], id = cidOf(it), box = $("cmts");
   box.hidden = !BACK || !id || view !== "play"; if (box.hidden) return;
@@ -817,17 +837,15 @@ function paintComments() {
   $("cnote").hidden = !(n && (n.desc || n.title)); $("cnote").textContent = n ? [n.title, n.desc].filter(Boolean).join(" · ") : "";
   $("ccount").textContent = list.length ? `· ${list.length}` : "";
   $("clist").innerHTML = list.map((c) => `<div class="cmt"><b>${esc(c.name)}</b>${c.sec ? ` <a data-sec="${c.sec}">at ${fmt(c.sec)}</a>` : ""}<br>${esc(c.text)}<br><small>${esc(String(c.ts).slice(0, 10))}</small></div>`).join("");
-  $("cname").value = myName();
 }
 $("clist").onclick = (e) => { const a = e.target.closest("[data-sec]"); if (a) { va().currentTime = Number(a.dataset.sec); va().play().catch(() => {}); } };
 setInterval(() => { $("catt").textContent = fmt(va().currentTime || 0); }, 500);
 $("cform").onsubmit = (e) => {
   e.preventDefault();
-  const it = items[idx], id = cidOf(it), text = $("ctext").value.trim(), name = $("cname").value.trim();
-  if (!text || !id) return; if (!name) { $("cname").focus(); return toast("Add your name so Adam knows who wrote it."); }
-  store.set("gtj-name", name);
+  const it = items[idx], id = cidOf(it), text = $("ctext").value.trim(), name = ME.name || "You";
+  if (!text || !id) return;
   const sec = $("cat").checked ? Math.floor(va().currentTime || 0) : 0;
-  fetch(BACK, {method: "POST", mode: "no-cors", body: JSON.stringify({action: "comment", clip: id, label: it.title, sec, name, text})}).catch(() => {});
+  postBack({action: "comment", clip: id, label: it.title, sec, text});
   (FEED.comments[id] = FEED.comments[id] || []).push({id: "x" + Date.now(), ts: new Date().toISOString(), sec, name, text});
   $("ctext").value = ""; paintComments(); toast("Posted. Adam gets a message.");
 };
@@ -835,9 +853,40 @@ $("cform").onsubmit = (e) => {
 vids.forEach((v) => v.addEventListener("timeupdate", () => {
   if (!BACK || v !== va() || v.currentTime < 3 || v.paused) return;
   const it = items[idx], id = cidOf(it); if (!id || viewed.has(id)) return; viewed.add(id);
-  fetch(BACK, {method: "POST", mode: "no-cors", body: JSON.stringify({action: "view", clip: id, label: it.title, name: myName()})}).catch(() => {});
+  postBack({action: "view", clip: id, label: it.title});
 }));
-const _paintOffline = paintOffline; paintOffline = function (s) { _paintOffline(s); paintComments(); };
+/* Family cuts: parts of a clip the owners hid. Everyone else's player jumps over them (a playback skip, not a deleted file). */
+const cutsFor = (id) => (FEED.cuts && FEED.cuts[id]) || [];
+const asFriend = () => !ME.owner || $("cut-preview").checked;
+function skipCuts(v) {
+  if (!BACK || v !== va() || !asFriend()) return;
+  const id = cidOf(items[idx]); if (!id) return;
+  for (const c of cutsFor(id)) if (v.currentTime >= c.from && v.currentTime < c.to) {
+    if (isFinite(v.duration) && c.to >= v.duration - 0.3) { v.currentTime = v.duration; } else v.currentTime = c.to;
+    return;
+  }
+}
+vids.forEach((v) => { v.addEventListener("timeupdate", () => skipCuts(v)); v.addEventListener("seeked", () => skipCuts(v)); v.addEventListener("loadedmetadata", () => skipCuts(v)); });
+function paintCuts() {
+  const id = cidOf(items[idx]), box = $("cutp");
+  document.querySelector(".dlmenu").hidden = !!id && cutsFor(id).length > 0 && asFriend();   // a download would carry the hidden part
+  box.hidden = !(BACK && ME.owner && id && view === "play"); if (box.hidden) return;
+  $("cutl").innerHTML = cutsFor(id).map((c) => `<span>${fmt(c.from)}–${c.to >= 99999 ? "end" : fmt(c.to)} hidden <button data-uncut="${esc(c.id)}" title="Show this part again">✕</button></span>`).join("") || `<span class="muted" style="background:none">Nothing hidden in this clip.</span>`;
+}
+function addCut(from, to) {
+  const id = cidOf(items[idx]); if (!id) return;
+  if (!(to > from)) return toast("Pick a start and an end, with the end after the start.");
+  postBack({action: "cut", clip: id, from, to});
+  (FEED.cuts[id] = FEED.cuts[id] || []).push({id: "x" + Date.now(), from, to}); paintCuts(); toast("Hidden for friends and family.");
+  setTimeout(loadFeed, 2500);
+}
+$("cut-start").onclick = () => addCut(0, Math.ceil(va().currentTime || 0));
+$("cut-end").onclick = () => addCut(Math.floor(va().currentTime || 0), 99999);
+$("cut-go").onclick = () => addCut(parseT($("cut-a").value), parseT($("cut-b").value));
+$("cutl").onclick = (e) => { const b = e.target.closest("[data-uncut]"); if (!b) return; const id = cidOf(items[idx]);
+  postBack({action: "uncut", id: b.dataset.uncut}); FEED.cuts[id] = cutsFor(id).filter((c) => c.id !== b.dataset.uncut); paintCuts(); setTimeout(loadFeed, 2500); };
+$("cut-preview").onchange = () => { skipCuts(va()); paintCuts(); };
+const _paintOffline = paintOffline; paintOffline = function (s) { _paintOffline(s); paintComments(); paintCuts(); };
 if (BACK) loadFeed();
 addEventListener("hashchange", () => { const {list, i} = readHash(); if (list.length && token && list.map((x) => [x.orig, x.start, x.end].join()).join() !== items.map((x) => [x.orig, x.start, x.end].join()).join()) { items = list; idx = i; show("play"); load(false); } });
 loadToken();
