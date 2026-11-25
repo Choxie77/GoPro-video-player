@@ -115,7 +115,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-
   <div class="hello" id="hello" hidden></div>
   <form class="search" id="sform" role="search">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
-    <input id="q" type="search" autocomplete="off" aria-label="Search all clips" placeholder="Try: Bangkok january, night, long clips in Vietnam, day 100">
+    <input id="q" type="search" autocomplete="off" aria-label="Search all clips" placeholder="Try: Bangkok january, night, long clips in Vietnam, 25 nov, 3/12/2026, day 100">
     <button class="btn" type="button" id="clear">Clear</button>
   </form>
   <div class="hints" id="hints"></div>
@@ -279,8 +279,36 @@ function prep(){
 }
 
 /* ---------- search ---------- */
+/* Dates in any format: 2026-11-25, 25/11/2026, 25.11.26, 25 Nov, 25th of November 2026, Nov 25, nov 2026, 11/2026,
+   20-25 nov, 20 to 25 nov 2026, mondays. Numbers like 3/4 are read day first (3 April). Year is optional. */
+const MON="jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?",ORD="(\\d{1,2})(?:st|nd|rd|th)?";
+const monNum=m=>["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(m.slice(0,3))+1;
+const yr=y=>y==null||y===""?null:(String(y).length===2?2000+ +y:+y);
+const okD=(d,m)=>d>=1&&d<=31&&(m==null||(m>=1&&m<=12));
+function extractDates(q){
+  const f=[],notes=[];let s=" "+q.toLowerCase().replace(/,/g," ")+" ";
+  const take=(re,fn)=>{s=s.replace(re,(...a)=>{const r=fn(a);if(r===null)return a[0];f.push(r);return " "})};
+  const mk=(y,m,d,d2)=>({k:"date",y,m,d,d2:d2||d});
+  take(/(?<![\d\/.-])(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?![\d\/.-])/g,a=>okD(+a[3],+a[2])?mk(+a[1],+a[2],+a[3]):null);
+  take(/(?<![\d\/.-])(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4}|\d{2})(?![\d\/.-])/g,a=>{let d=+a[1],m=+a[2];
+    if(m>12&&d<=12)[d,m]=[m,d];else if(d<=12&&m<=12&&d!==m)notes.push(`Read ${a[1]}/${a[2]} as day ${d}, month ${m}.`);
+    return okD(d,m)?mk(yr(a[3]),m,d):null});
+  take(/(?<![\d\/.-])(\d{4})[-\/.](\d{1,2})(?![\d\/.-])/g,a=>+a[2]>=1&&+a[2]<=12?mk(+a[1],+a[2],null):null);
+  take(/(?<![\d\/.-])(\d{1,2})[\/.](\d{4})(?![\d\/.-])/g,a=>+a[1]>=1&&+a[1]<=12?mk(+a[2],+a[1],null):null);
+  take(/(?<![\d\/.-])(\d{1,2})[\/.](\d{1,2})(?![\d\/.-])/g,a=>{const d=+a[1],m=+a[2];return d>=1&&m>=1&&m<=12&&d<=31?mk(null,m,d):null});
+  take(new RegExp("\\b"+ORD+"\\s*(?:-|\u2013|to|until|till)\\s*"+ORD+"\\s*(?:of\\s+)?("+MON+")\\b(?:\\s+'?(\\d{4}|\\d{2}\\b))?","g"),a=>okD(+a[1])&&okD(+a[2])?mk(yr(a[4]),monNum(a[3]),+a[1],+a[2]):null);
+  take(new RegExp("\\b"+ORD+"\\s*(?:of\\s+)?("+MON+")\\b(?:\\s+'?(\\d{4})\\b|\\s+'(\\d{2})\\b)?","g"),a=>okD(+a[1])?mk(yr(a[3]||a[4]),monNum(a[2]),+a[1]):null);
+  take(new RegExp("\\b("+MON+")\\s+"+ORD+"(?![\\d.:]|\\s*[km]\\b)(?:\\s+(\\d{4})\\b)?","g"),a=>okD(+a[2])?mk(yr(a[3]),monNum(a[1]),+a[2]):null);
+  take(new RegExp("\\b("+MON+")\\s+(\\d{4})\\b","g"),a=>mk(+a[2],monNum(a[1]),null));
+  take(new RegExp("\\b(\\d{4})\\s+("+MON+")\\b","g"),a=>mk(+a[1],monNum(a[2]),null));
+  take(/\b(sun|mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?)day(?:s)?\b/g,a=>({k:"wd",v:["sun","mon","tue","wed","thu","fri","sat"].indexOf(a[1].slice(0,3))}));
+  return{rest:s.trim(),f,notes};
+}
+const dateOk=(x,date)=>{const y=+date.slice(0,4),m=+date.slice(5,7),d=+date.slice(8,10);
+  return (x.y==null||x.y===y)&&(x.m==null||x.m===m)&&(x.d==null||(d>=x.d&&d<=x.d2))};
 function parse(q){
-  const t=norm(q).match(/[a-z0-9']+(?:-\d+)*/g)||[],f=[];
+  const ed=extractDates(q);parse.notes=ed.notes;q=ed.rest;
+  const t=norm(q).match(/[a-z0-9']+(?:-\d+)*/g)||[],f=[...ed.f];
   for(let i=0;i<t.length;i++){
     const w=t[i];
     if(w==="day"&&/^\d+$/.test(t[i+1]||"")){f.push({k:"day",v:+t[++i]});continue}
@@ -311,7 +339,7 @@ function fixWord(v){
 }
 /* One pass gives the results plus what the country chips (all countries) and date strip (all dates) need. */
 function run(){
-  let f=parse(S.q);const notes=[];
+  let f=parse(S.q);const notes=[...parse.notes];
   f=f.map(x=>{if(x.k!=="txt"||x.v.length<4||/^\d/.test(x.v))return x;
     const w=fixWord(x.v);if(w!==x.v){notes.push(`No match for "${x.v}", showing "${w}".`);return{k:"txt",v:w}}return x});
   const res=[],anyCountry=[],anyDate=new Set();
@@ -324,6 +352,8 @@ function run(){
     for(const x of f){
       if(x.k==="day"){if(c.day!==x.v){ok=false;break}sc+=2}
       else if(x.k==="dur"){if((x.max&&c.dur>=x.max)||(x.min&&c.dur<x.min)){ok=false;break}}
+      else if(x.k==="date"){if(!dateOk(x,c.o.date)){ok=false;break}sc+=2}
+      else if(x.k==="wd"){if(new Date(c.o.date+"T12:00").getDay()!==x.v){ok=false;break}}
       else if(x.k==="hrs"){if(!x.set.includes(c.o.h)){ok=false;break}}
       else if(c.o.hay.includes(x.v))sc+=c.o.lab.includes(x.v)?3:1;
       else if(c.o.tx.includes(x.v))sc+=2;
