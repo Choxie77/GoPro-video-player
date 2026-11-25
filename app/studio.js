@@ -126,6 +126,12 @@
     .sx-req { max-width: 1040px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
     .sx-req h2 { margin: 0; font-size: 20px; } .sx-req h3 { margin: 0 0 6px; font-size: 14px; }
     .sx-req .lede { margin: 4px 0 0; color: var(--muted); font-size: 14px; max-width: 70ch; }
+    .px-alts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: -4px; }
+    .px-alts .sx-btn { white-space: normal; text-align: left; font-weight: 550; }
+    .px-alts .sx-btn[aria-pressed="true"] { border-color: var(--ink); }
+    #px-all { width: 100%; margin-top: 10px; }
+    .px-aist { margin: 8px 0 0; }
+    .px-aist:empty { display: none; }
     .sx-ready { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
     .sx-ready li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; font-size: 13px; }
     .sx-ready i { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 5px; font-style: normal; font-size: 12px; font-weight: 700; border: 1px solid var(--line); }
@@ -606,22 +612,54 @@
   const fullCaption = (p) => [(p.caption || "").trim(), cleanTags(p.tags).join(" ")].filter(Boolean).join("\n\n");
   const pubEdit = (p) => { const v = p.id ? editsOf(p.id) : []; return v.find((e) => e.v === p.edit) || v.at(-1) || null; };
   const whereOf = (p) => { p.where ||= {}; for (const [k] of PLATS) p.where[k] ||= {on: k === "instagram"}; if (p.igUrl && !p.where.instagram.url) p.where.instagram.url = p.igUrl; return p.where; };
+  function aiStatus(ai, isApproved, rendered, left) {
+    if (ai?.status === "waiting") return "Sent to your Mac. The AI starts within 30 seconds.";
+    if (ai?.status === "working") return "AI is writing the hook, caption, hashtags and picking the cover…";
+    if (ai?.renderStage === "rendering") return "Rendering the final video on your Mac. About 5 minutes.";
+    if (ai?.status === "failed") return `AI couldn't finish: ${ai.error || "unknown error"}. Try again.`;
+    if (ai?.renderStage === "failed") return `Render failed: ${ai.renderError || "unknown error"}.`;
+    if (!left) return ai?.result ? `Words by AI (${ai.usedModel || "Claude"}). ${ai.result.why || ""}` : "";
+    return `AI writes what is missing and picks the cover, the next free day is set${isApproved && !rendered ? " and your Mac renders the video" : ""}. Your own words are kept.${isApproved ? "" : " Approve an edit to render it."}`;
+  }
   function otherPosts(p) { return [...store.posts.entries()].filter(([id, x]) => id !== p.id && x.scheduled && x.status !== "posted").map(([, x]) => x); }
   function coverChoices(p) {
     const e = pubEdit(p)?.edl;
     const l = e?.shots?.length ? e.shots.map((s) => ({clip: s.clip, t: r2((s.in + s.out) / 2), x: s.x ?? .5})) : p.items.map((it) => { const r = spanOf(it); return {clip: it.clip, t: r2((r.a + r.b) / 2), x: .5}; });
     return l.slice(0, 24);
   }
+  // AI for the Publish step: tools/post_words.py on the Mac writes words/<post>; the app copies the result into the post.
+  let wordsPoll = null;
+  const hasText = (v) => /[\p{L}\p{N}]/u.test(String(v || ""));  // a stray "#" or space is not a hook
+  const wordsOf = (p) => (p.id && window.__wordsInfo?.(p.id)) || null;
+  function syncLive(p) {  // the Mac renders and sets status "cut" on the saved post; keep the open draft from undoing that
+    const live = p.id && store.posts.get(p.id);
+    if (live && ["render", "edit"].includes(p.status) && ["cut", "scheduled", "posted"].includes(live.status)) {
+      p.status = live.status; for (const k of ["renderFile", "renderUrl"]) if (live[k]) p[k] = live[k]; queueSave();
+    }
+  }
+  function applyWords(p, covers) {
+    const w = wordsOf(p);
+    if (!w || w.status !== "done" || w.applied || !w.result) return;
+    const r = w.result, over = !!w.overwrite, got = [];
+    for (const [k, n] of [["hook", "hook"], ["caption", "caption"], ["tags", "hashtags"], ["firstComment", "first comment"]]) {
+      if (hasText(r[k]) && (over || !hasText(p[k]))) { p[k] = r[k]; got.push(n); }
+    }
+    if (covers[r.cover] && (over || !p.cover)) { p.cover = covers[r.cover]; got.push("cover"); }
+    window.__wordsApplied?.(p.id); queueSave();
+    toast(got.length ? `AI wrote the ${got.join(", ").replace(/, ([^,]*)$/, " and $1")}` : "AI finished. Your own words were kept");
+  }
   function drawPublish(box, p) {
     const edit = pubEdit(p), where = whereOf(p), covers = coverChoices(p);
+    syncLive(p); applyWords(p, covers);
+    const ai = wordsOf(p), aiBusy = ["waiting", "working"].includes(ai?.status), rendering = ai?.renderStage === "rendering";
     if (!p.cover && covers[0]) p.cover = null;
     const shown = p.cover || covers[0] || null;
     const isApproved = approved(p), rendered = ["cut", "scheduled", "posted"].includes(p.status) || !!p.renderUrl;
     const stage = p.status === "posted" ? 4 : p.status === "scheduled" ? 3 : rendered ? 2 : isApproved ? 1 : 0;
-    const flowItems = [["Approved", isApproved ? `v${p.edit}` : edit ? `v${edit.v} to approve` : "No edit yet"], ["Final video", rendered ? "Ready" : isApproved ? "Waiting for render" : "After approval"], ["Scheduled", p.scheduled ? `${fmtShort(p.scheduled)}${p.time ? " · " + p.time : ""}` : "No date"], ["Posted", p.status === "posted" ? (p.postedAt ? fmtShort(p.postedAt) : "Done") : "Not yet"]];
+    const flowItems = [["Approved", isApproved ? `v${p.edit}` : edit ? `v${edit.v} to approve` : "No edit yet"], ["Final video", rendered ? "Ready" : rendering ? "Rendering on your Mac" : isApproved ? "Waiting for render" : "After approval"], ["Scheduled", p.scheduled ? `${fmtShort(p.scheduled)}${p.time ? " · " + p.time : ""}` : "No date"], ["Posted", p.status === "posted" ? (p.postedAt ? fmtShort(p.postedAt) : "Done") : "Not yet"]];
     const checks = [
       [isApproved, "An edit is approved", isApproved ? "" : "edit"], [rendered, "Final video is rendered", rendered ? "" : "edit"],
-      [!!(p.hook || "").trim(), "Hook written", "px-hook"], [!!(p.caption || "").trim(), "Caption written", "px-cap"],
+      [hasText(p.hook), "Hook written", "px-hook"], [hasText(p.caption), "Caption written", "px-cap"],
       [!!p.cover, "Cover chosen", "px-covers"], [!!p.scheduled, "Post date set", "px-date"],
     ];
     const left = checks.filter((c) => !c[0]).length;
@@ -638,8 +676,9 @@
           ${p.renderUrl ? `<a class="sx-btn" href="${esc(p.renderUrl)}" target="_blank" rel="noopener">Open final video</a>` : ""}
         </div>
         <div class="sx-stack">
-          <div class="sx-card2"><div class="ex-hd"><h3>Words</h3><button class="sx-btn tiny" id="px-draft" title="Starts the caption from your hook and story. No AI used">Draft from story</button></div>
+          <div class="sx-card2"><div class="ex-hd"><h3>Words</h3><button class="sx-btn tiny" id="px-ai" ${aiBusy ? "disabled" : ""} title="Claude Haiku on your Mac writes the hook, caption, hashtags and first comment from the cut and what you say in it">${aiBusy ? "✦ Writing…" : "✦ Write with AI"}</button></div>
             <label class="sx-f">Hook <small>The line on screen in the first two seconds.</small><input id="px-hook" data-p="hook" value="${esc(p.hook || "")}" maxlength="90" placeholder="The line that stops the scroll"></label>
+            ${ai?.result?.hooks?.length ? `<div class="px-alts"><span class="muted small">Other hooks</span>${ai.result.hooks.map((h) => `<button type="button" class="sx-btn tiny" data-hook="${esc(h)}" aria-pressed="${h === p.hook}">${esc(h)}</button>`).join("")}</div>` : ""}
             <label class="sx-f"><span class="ex-hd">Caption <span class="px-count" id="px-capn"></span></span><textarea id="px-cap" data-p="caption" maxlength="2200" style="min-height:150px" placeholder="First line shows before “more”, so make it count.">${esc(p.caption || "")}</textarea></label>
             <label class="sx-f"><span class="ex-hd">Hashtags <span class="px-count" id="px-tagn"></span></span><input id="px-tags" data-p="tags" value="${esc(p.tags || "")}" placeholder="#travel #solotravel #asia"></label>
             <label class="sx-f">First comment <small>Optional. Pin it after posting.</small><input data-p="firstComment" value="${esc(p.firstComment || "")}" maxlength="400"></label>
@@ -659,7 +698,9 @@
         </div>
         <div class="sx-stack px-right">
           <div class="sx-card2"><div class="ex-hd"><h3>Ready to post?</h3><span class="muted small">${left ? `${left} left` : "All set"}</span></div>
-            <ul class="sx-ready">${checks.map(([ok, t, go]) => `<li class="${ok ? "ok" : "tip"}"><i>${ok ? "✓" : "·"}</i><span>${t}</span>${ok ? "<span></span>" : `<button class="sx-btn tiny" data-fix="${go}">Fix</button>`}</li>`).join("")}</ul></div>
+            <ul class="sx-ready">${checks.map(([ok, t, go]) => `<li class="${ok ? "ok" : "tip"}"><i>${ok ? "✓" : "·"}</i><span>${t}</span>${ok ? "<span></span>" : `<button class="sx-btn tiny" data-fix="${go}">Fix</button>`}</li>`).join("")}</ul>
+            ${left ? `<button class="sx-btn main" id="px-all" ${aiBusy || rendering ? "disabled" : ""}>${aiBusy || rendering ? "✦ Working on it…" : "✦ Do it all for me"}</button>` : ""}
+            <p class="muted small px-aist" role="status">${esc(aiStatus(ai, isApproved, rendered, left))}</p></div>
           <div class="sx-card2"><h3>Where it goes</h3>${PLATS.map(([k, name, lim]) => { const w = where[k]; return `<div class="px-plat" data-k="${k}"><div class="ex-hd"><label style="display:flex;gap:6px;align-items:center;font-size:13px;font-weight:650"><input type="checkbox" data-on ${w.on ? "checked" : ""}> ${name}</label><span class="px-count" data-lim="${lim}"></span></div>
             ${w.on ? `<input type="url" data-url value="${esc(w.url || "")}" placeholder="Link once it is live" aria-label="${name} link">
             <div class="sx-acts"><button class="sx-btn tiny ${w.posted ? "" : "main"}" data-post>${w.posted ? `✓ Posted${w.at ? " " + fmtShort(w.at) : ""} · undo` : "Mark as posted"}</button>${w.url ? `<a class="sx-btn tiny" href="${esc(w.url)}" target="_blank" rel="noopener">Open</a>` : ""}</div>
@@ -699,12 +740,37 @@
       else queueSave();
       redraw();
     }; });
-    $("px-draft").onclick = () => {
-      if ((p.caption || "").trim() && !confirm("Replace the caption with a draft from your hook and story?")) return;
-      p.caption = [(p.hook || "").trim(), (p.brief.story || "").trim()].filter(Boolean).join("\n\n");
-      if (!p.caption) return toast("Write a hook or a story first", true);
-      $("px-cap").value = p.caption; paintWords(); queueSave();
+    const askAI = async (opts) => {
+      if (!window.__wordsRequest) return toast("Reload the app to use AI here", true);
+      if (!p.id) return toast("Give the post a title first so it saves", true);
+      await window.__wordsRequest(p.id, opts);
+      toast(opts.render ? "Sent to your Mac: AI writes the words, then the video renders" : "Sent to your Mac. The words arrive in about a minute");
+      redraw();
     };
+    $("px-ai").onclick = () => {
+      if (["hook", "caption", "tags", "firstComment"].some((k) => hasText(p[k])) && !confirm("Replace your hook, caption, hashtags and first comment with new ones from AI?")) return;
+      askAI({overwrite: true});
+    };
+    if ($("px-all")) $("px-all").onclick = () => {
+      if (!p.scheduled) {  // next day with no other post planned, at the usual evening slot
+        const d = new Date();
+        for (let i = 0; i < 365; i++, d.setDate(d.getDate() + 1)) { const k = isoDay(d); if (!others.some((x) => x.scheduled === k)) { p.scheduled = k; ui.week = Math.floor(i / 7); break; } }
+        p.time ||= "18:00"; if ($("p-sched")) $("p-sched").value = p.scheduled; queueSave(); drawChrome();
+      }
+      const needWords = ["hook", "caption", "tags"].some((k) => !hasText(p[k])) || !p.cover, needRender = isApproved && !rendered;
+      if (!needWords && !needRender) return redraw();
+      askAI({overwrite: false, render: needRender});
+    };
+    box.querySelectorAll("[data-hook]").forEach((b) => { b.onclick = () => { p.hook = b.dataset.hook; queueSave(); redraw(); }; });
+    clearInterval(wordsPoll);
+    if (aiBusy || rendering) {  // check Drive every 5 s while the Mac works, and redraw once it answers
+      const seen = JSON.stringify(ai);
+      wordsPoll = setInterval(async () => {
+        if (!box.isConnected || ui.view !== "post" || draft !== p) return clearInterval(wordsPoll);
+        await window.__gtaPull?.();
+        if (JSON.stringify(wordsOf(p)) !== seen && !box.querySelector(":focus")) { clearInterval(wordsPoll); redraw(); }
+      }, 5000);
+    }
     $("px-copy").onclick = () => { const t = fullCaption(p); t ? copy(t, "Caption and hashtags copied") : toast("Write a caption first", true); };
     $("px-copy1").onclick = () => (p.firstComment ? copy(p.firstComment, "First comment copied") : toast("No first comment yet", true));
     $("px-gd").onchange = (e) => { $("px-safe").hidden = !e.target.checked; };

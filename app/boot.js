@@ -299,6 +299,17 @@
     await db.collection("requests").doc(post).set({post, mode, note: note || "", status: "waiting", at: new Date().toISOString()});
     toast("Edit requested. The auto-editor on your Mac picks it up within a minute");
   };
+  // Publish step AI (tools/post_words.py on the Mac, via the auto-editor watcher): words/<post> = {status, render, overwrite, result}
+  window.__wordsInfo = (post) => state.docs.words?.[post] || null;
+  window.__wordsRequest = async (post, opts = {}) => {
+    await db.collection("words").doc(post).set({post, status: "waiting", render: !!opts.render, overwrite: !!opts.overwrite, at: new Date().toISOString()});
+  };
+  window.__wordsApplied = async (post) => { const w = state.docs.words?.[post]; if (w) await db.collection("words").doc(post).set({...w, applied: true, appliedAt: new Date().toISOString()}); };
+  // Check Drive for changes now instead of waiting for the 30 s check (used while the Mac is working on a request).
+  window.__gtaPull = async () => {
+    if (!fileId || flushing || pending.length) return;
+    try { const m = await meta(fileId, "version"); if (String(m.version) !== version) await pull(); } catch (e) {}
+  };
   addEventListener("beforeunload", (e) => { if (pending.length && fileId) { flush(); e.preventDefault(); } });
 
   /* ---------- start ---------- */
