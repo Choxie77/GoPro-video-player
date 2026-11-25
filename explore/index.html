@@ -390,7 +390,8 @@ async function loadIndex(){
   const hit=last&&await cget(last.key);
   if(hit){   // show the saved copy now; swap in a newer one if Drive has it
     try{useIndex(await hit.json(),last.sheets);
-      findIndex().then(async f=>{if(idxKey(f)===last.key)return;const n=await fetchIndex(f);useIndex(n.data,n.sheets);sprUrls.clear();tourDone=false;buildDays();render();keepCache()}).catch(()=>{});
+      findIndex().then(async f=>{if(idxKey(f)===last.key)return;const n=await fetchIndex(f);useIndex(n.data,n.sheets);sprUrls.clear();tourDone=false;buildDays();render();keepCache()}).catch(e=>{   // the saved copy may belong to another account on this browser: drop it if this one has no access
+        if(["NOACCESS","403","404"].includes(String(e.message))){store.set("gtx-last",null);cprune(new Set());CL=[];INDEX.clips=[];render();noAccess()}});
       return}catch(e){}
   }
   const f=await findIndex(),n=await fetchIndex(f);useIndex(n.data,n.sheets);keepCache();
@@ -1211,7 +1212,9 @@ async function noAccess(){
   if(st==="pending"||st==="approved")show("Adam just got a message asking to let you in. <b>Keep this page open</b>: it opens the trip by itself as soon as he says yes.");
   else show("This Google account can't see the trip yet. Send Adam the address below and he'll add you; this page opens by itself once he does.");
   clearInterval(accessPoll);
-  accessPoll=setInterval(async()=>{if(!token)return;try{await findIndex();clearInterval(accessPoll);try{sessionStorage.removeItem("gtx-healed")}catch(e){}location.reload()}catch(e){}},15000);
+  const check=async()=>{if(!token)return;try{await findIndex();clearInterval(accessPoll);try{sessionStorage.removeItem("gtx-healed")}catch(e){}location.reload()}catch(e){}};
+  accessPoll=setInterval(check,15000);
+  if(!noAccess.vis){noAccess.vis=1;document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&$("accessnote"))check()});addEventListener("focus",()=>{if($("accessnote"))check()})}   // phones pause hidden tabs: check again when she comes back
 }
 
 /* ---------- empty-library diagnostic ---------- */
@@ -1236,6 +1239,7 @@ async function diagInfo(){
 }
 async function checkEmpty(){
   const box=$("diag");if(!box)return;
+  if($("accessnote")){box.hidden=true;return}   // the no-access note already explains it
   if(CL.length){box.hidden=true;box.innerHTML="";return}
   if(!sessionStorage.getItem("gtx-healed")){try{sessionStorage.setItem("gtx-healed","1")}catch(e){}return freshStart()}
   box.hidden=false;box.innerHTML=`<div class="note"><b>No clips came through for this account.</b><br>Checking why…</div>`;
@@ -1277,4 +1281,3 @@ else{$("welcome").hidden=false;$("signin").hidden=false;initGoogle()}
 </script>
 </body>
 </html>
-                                       
