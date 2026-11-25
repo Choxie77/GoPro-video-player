@@ -755,7 +755,10 @@ document.addEventListener("pointermove",e=>{if(e.pointerType==="touch")return;co
 
 /* ---------- opening clips in the player, hearts, links ---------- */
 function openList(clips,i,startSecs){
-  const list=clips.slice(Math.max(0,i),Math.max(0,i)+80).map((c,k)=>[c.drive,c.pv||"",`${c.o.label} · ${fmtDate(c.t)}`,k===0&&startSecs?Math.max(0,startSecs-2):0,c.hd||"","","","","",c.id].map(x=>encodeURIComponent(x??"").replace(/~/g,"%7E")).join("~")).join("|");
+  // clips with no Light/HD copy only have the 5K original, which most browsers can't play: in a queue, keep just the playable ones (the clip you chose stays first)
+  let seq=clips.slice(Math.max(0,i));
+  if(seq.length>1)seq=seq.filter((c,k)=>k===0||c.pv||c.hd);
+  const list=seq.slice(0,80).map((c,k)=>[c.drive,c.pv||"",`${c.o.label} · ${fmtDate(c.t)}`,k===0&&startSecs?Math.max(0,startSecs-2):0,c.hd||"","","","","",c.id].map(x=>encodeURIComponent(x??"").replace(/~/g,"%7E")).join("~")).join("|");
   location.href=`${TEST_API?"../player/":"../"}index.html${TEST_API?location.search:""}#q=light&i=0&list=${encodeURIComponent(list)}`;
 }
 function cardAct(e){
@@ -889,7 +892,7 @@ function ownerBar(){
     else if(k==="exit"){const q=new URLSearchParams(location.search);q.set("owner","0");location.search=q.toString()}}
 }
 $("rnd").onclick=()=>{   // a shuffled queue of whatever is showing, starting on a random clip
-  if(!RES.length)return;const a=RES.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}openList(a,0)};
+  if(!RES.length)return;const pl=RES.filter(c=>c.pv||c.hd);const a=(pl.length?pl:RES).slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}openList(a,0)};
 $("watch").onclick=()=>{   // the best clips of whatever is showing, played in the order they happened
   const best=[...RES].sort((a,b)=>b.pick-a.pick||(b.hl||0)-(a.hl||0)).slice(0,40).sort((a,b)=>a.t<b.t?-1:1);openList(best,0)};
 

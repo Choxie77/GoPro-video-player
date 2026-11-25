@@ -670,6 +670,10 @@ vids.forEach((v) => {
     if (Date.now() > tokenExpires) return note("Your Google session ended. Sign in again to keep watching.", true, ["Sign in", signIn]);
     if (useProxy) { useProxy = false; load(true); return; }
     const it = items[idx];
+    if (pickQuality(it) === "orig" && !it.hd && !it.light && idx < items.length - 1) {   // no playable copy yet: move on instead of leaving a dead player
+      const at = idx; note("This clip has no Light copy yet and its original won't play in a browser. Skipping to the next one…", true);
+      setTimeout(() => { if (idx === at) { idx++; load(false); } }, 2500); return;
+    }
     if (pickQuality(it) === "orig" && (it.hd || it.light)) { quality = it.hd ? "hd" : "light"; note("The original wouldn't play in this browser, so a copy is playing instead."); load(true); return; }
     const key = pickQuality(it), fid = it[key];
     note("This clip couldn't be played. Checking why…", true);
@@ -677,7 +681,7 @@ vids.forEach((v) => {
       if (v !== va()) return;
       if (r.status === 403 || r.status === 404) note("This Google account can't open this clip. Ask Adam to share the GoPro Travels folder (including its previews) with the Gmail address you signed in with, then reload.", true);
       else if (r.status === 401) note("Your Google session ended. Sign in again to keep watching.", true, ["Sign in", signIn]);
-      else if (r.ok) note(`The clip is there but your browser couldn't play it (${key === "orig" ? "full original" : key}). Try the Light copy, or another browser such as Chrome.`, true);
+      else if (r.ok) note(key === "orig" && !it.hd && !it.light ? "This clip has no Light copy yet, and its full original is too large for most browsers to play. Ask Adam to make the Light copies (Colab pass 3)." : `The clip is there but your browser couldn't play it (${key === "orig" ? "full original" : key}). Try the Light copy, or another browser such as Chrome.`, true);
       else note(`This clip couldn't be played (Drive error ${r.status}). Reload and try again.`, true);
     }).catch(() => { if (v === va()) note("This clip couldn't be played. Check your internet connection and reload.", true); });
   });
