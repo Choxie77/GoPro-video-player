@@ -63,6 +63,7 @@ main{max-width:1240px;margin:0 auto;padding:16px}
 .globe .tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;white-space:nowrap;transform:translate(-50%,-130%)}
 .globe .now{position:absolute;left:12px;bottom:10px;right:12px;display:flex;gap:10px;align-items:center;font-size:13px}
 .globe .mode{position:absolute;top:10px;left:10px;display:flex;gap:4px}
+.globe .zoom{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:4px}.globe .zoom button{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:600 18px system-ui,sans-serif;cursor:pointer;padding:0}.globe .zoom button:hover{border-color:var(--accent)}.globe .zoom[hidden]{display:none}
 .side{display:flex;flex-direction:column;gap:12px;min-width:0}
 .card2{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}
@@ -163,6 +164,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-
   <div class="viz">
     <div class="globe" id="globe"><canvas id="gc" aria-label="Globe or map showing the route"></canvas><div class="tip" id="tip" hidden></div>
       <div class="mode seg"><button type="button" id="mg" aria-pressed="true">Globe</button><button type="button" id="mm" aria-pressed="false">Map</button></div>
+      <div class="zoom" id="zoomc"><button type="button" id="zin" aria-label="Zoom in">+</button><button type="button" id="zout" aria-label="Zoom out">−</button></div>
       <div class="now"><button class="btn pri" id="play" type="button">Play the journey</button><span id="nowtxt" style="color:var(--ink)"></span></div></div>
     <div class="side">
       <div class="card2"><div class="stats" id="stats"></div></div>
@@ -792,7 +794,7 @@ dc.onpointerup=e=>{if(!dragA)return;const b=dayAt(e);if(b===dragA&&S.range&&S.ra
 addEventListener("resize",()=>{drawStrip();sizeGlobe()});
 
 /* ---------- globe + flat clip map ---------- */
-const G={lon:100,lat:12,spin:true,sel:null,play:null,mode:"globe",dayCursor:null};
+const G={z:1,lon:100,lat:12,spin:true,sel:null,play:null,mode:"globe",dayCursor:null};
 const M={lon:105,lat:18,z:3.2};
 const gc=$("gc"),R2=Math.PI/180;let gw=0,rings=null,visited=new Set();
 let GDIRTY=true,MAPDIRTY=true,CELLS=null,gOn=true;
@@ -837,7 +839,7 @@ function slerp(a,b,t){
   const x=k1*A[0]+k2*B[0],y=k1*A[1]+k2*B[1],z=k1*A[2]+k2*B[2];return{lon:Math.atan2(y,x)/R2,lat:Math.atan2(z,Math.hypot(x,y))/R2};
 }
 function drawGlobe(){
-  const dpr=gdpr(),x=gc.getContext("2d"),W=gc.width/dpr,R=W*.44,cx=W/2,cy=W/2,C=colors();
+  const dpr=gdpr(),x=gc.getContext("2d"),W=gc.width/dpr,R=W*.44*G.z,cx=W/2,cy=W/2,C=colors();
   const css=n=>C[n.slice(2)];
   x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,W,W);x.translate(cx,cy);
   const dark=matchMedia("(prefers-color-scheme: dark)").matches;
@@ -881,7 +883,7 @@ function drawGlobe(){
     x.lineWidth=sel?3:1.5;x.strokeStyle=sel?css("--ink"):css("--bg");x.stroke();x.globalAlpha=1});
   // city names, biggest stops first, skipping any that would overlap
   x.font="600 11px system-ui,sans-serif";x.textBaseline="middle";const boxes=[];
-  for(const d of [...G.dots].sort((a,b)=>b.c.secs-a.c.secs)){const X=d.X-cx,Y=d.Y-cy;if(Math.hypot(X,Y)>R*.93)continue;
+  for(const d of [...G.dots].sort((a,b)=>b.c.secs-a.c.secs)){const X=d.X-cx,Y=d.Y-cy;if(Math.hypot(X,Y)>R*.93||Math.abs(X)>W/2||Math.abs(Y)>W/2)continue;
     const w=x.measureText(d.c.label).width,bx=X+d.r+4,by=Y-7;
     if(boxes.some(b=>bx<b[0]+b[2]&&bx+w>b[0]&&by<b[1]+b[3]&&by+14>b[1]))continue;boxes.push([bx,by,w,14]);
     x.lineWidth=3;x.strokeStyle=css("--bg");x.globalAlpha=.85;x.strokeText(d.c.label,bx,Y);x.globalAlpha=1;x.fillStyle=css("--ink");x.fillText(d.c.label,bx,Y)}
@@ -906,7 +908,7 @@ function drawMap(){
   G.dots=[];for(const c of cells.values()){const [X,Y]=mapXY(c.lon,c.lat,W);if(X<-10||Y<-10||X>W+10||Y>W+10)continue;const r=2.5+Math.sqrt(c.n)*1.6;G.dots.push({X,Y,r,cell:c});
     x.globalAlpha=S.cell&&S.cell!==c.key?.3:.85;x.fillStyle=c.col;x.beginPath();x.arc(X,Y,r,0,7);x.fill();x.lineWidth=S.cell===c.key?3:1;x.strokeStyle=S.cell===c.key?css("--ink"):css("--bg");x.stroke();x.globalAlpha=1}
 }
-function setMode(m){G.mode=m;GDIRTY=MAPDIRTY=true;$("mg").setAttribute("aria-pressed",m==="globe");$("mm").setAttribute("aria-pressed",m==="map");$("play").hidden=m==="map";if(m==="map"&&G.play)stopPlay();if(m==="globe")S.cell="";render()}
+function setMode(m){G.mode=m;$("zoomc").hidden=m==="map";GDIRTY=MAPDIRTY=true;$("mg").setAttribute("aria-pressed",m==="globe");$("mm").setAttribute("aria-pressed",m==="map");$("play").hidden=m==="map";if(m==="map"&&G.play)stopPlay();if(m==="globe")S.cell="";render()}
 $("mg").onclick=()=>setMode("globe");$("mm").onclick=()=>{setMode("map");if(S.place){const c=CH.find(x=>x.label===S.place);if(c){M.lon=c.lon;M.lat=c.lat;M.z=6}}};
 function flyTo(lon,lat){if(G.mode==="map"){MAPDIRTY=true;M.lon=lon;M.lat=lat;M.z=Math.max(M.z,5);return}G.fly={lon,lat};G.spin=false}
 let last=0;
@@ -935,17 +937,24 @@ gc.onpointermove=e=>{
   const r=gc.getBoundingClientRect();
   if(G.drag){const dx=e.clientX-G.drag.x,dy=e.clientY-G.drag.y;if(Math.abs(dx)+Math.abs(dy)>3)G.drag.moved=true;
     if(G.mode==="map"){MAPDIRTY=true;const k=r.width/360*Math.pow(2,M.z-1.2);M.lon-=dx/k;M.lat=Math.max(-70,Math.min(75,M.lat+dy/k*.85))}
-    else{G.lon-=dx*.4;G.lat=Math.max(-70,Math.min(70,G.lat+dy*.4))}
+    else{G.lon-=dx*.4/G.z;G.lat=Math.max(-80,Math.min(80,G.lat+dy*.4/G.z))}
     G.drag.x=e.clientX;G.drag.y=e.clientY;return}
   const px=e.clientX-r.left,py=e.clientY-r.top;const d=(G.dots||[]).find(d=>Math.hypot(d.X-px,d.Y-py)<=d.r+5);
   const tip=$("tip");if(d){tip.hidden=false;tip.style.left=d.X+"px";tip.style.top=d.Y+"px";
     tip.textContent=d.c?`${d.c.label}, ${d.c.country} · ${fmtDate(d.c.a)}${d.c.a===d.c.b?"":" to "+fmtDate(d.c.b)}`:`${d.cell.n} clip${d.cell.n===1?"":"s"} filmed here`;gc.style.cursor="pointer"}else{tip.hidden=true;gc.style.cursor="grab"}
 };
-gc.onpointerup=e=>{const moved=G.drag?.moved;G.drag=null;gc.style.cursor="grab";if(moved)return;
+gc.onpointerup=e=>{const moved=G.drag?.moved||G.pinched;G.drag=null;gc.style.cursor="grab";if(moved)return;
   const r=gc.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,d=(G.dots||[]).find(d=>Math.hypot(d.X-px,d.Y-py)<=d.r+5);
   if(G.mode==="map"){S.cell=d&&S.cell!==d.cell.key?d.cell.key:"";S.shown=60;render();return}
   if(d){S.place=S.place===d.c.label?"":d.c.label;G.sel=S.place||null;S.shown=60;if(S.place)flyTo(d.c.lon,d.c.lat);render()}};
-gc.addEventListener("wheel",e=>{if(G.mode!=="map")return;e.preventDefault();MAPDIRTY=true;M.z=Math.max(2.2,Math.min(11,M.z-e.deltaY*.002))},{passive:false});
+function setZoom(z){z=Math.max(1,Math.min(8,z));if(z===G.z)return;G.z=z;if(z>1.05)G.spin=false;GDIRTY=true}
+$("zin").onclick=()=>{G.fly=null;setZoom(G.z*1.5)};$("zout").onclick=()=>{G.fly=null;setZoom(G.z/1.5)};
+const PTR=new Map();
+gc.addEventListener("pointerdown",e=>{PTR.set(e.pointerId,[e.clientX,e.clientY]);if(PTR.size===2&&G.mode==="globe"){const [a,b]=[...PTR.values()];G.pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),z:G.z};G.pinched=true;G.drag=null}});
+gc.addEventListener("pointermove",e=>{if(!PTR.has(e.pointerId))return;PTR.set(e.pointerId,[e.clientX,e.clientY]);if(G.pinch&&PTR.size===2){const [a,b]=[...PTR.values()];setZoom(G.pinch.z*Math.hypot(a[0]-b[0],a[1]-b[1])/G.pinch.d)}});
+const pend=e=>{PTR.delete(e.pointerId);if(PTR.size<2)G.pinch=null;if(!PTR.size)setTimeout(()=>{G.pinched=false},0)};
+gc.addEventListener("pointerup",pend);gc.addEventListener("pointercancel",pend);
+gc.addEventListener("wheel",e=>{if(G.mode==="globe"){e.preventDefault();G.fly=null;setZoom(G.z*Math.exp(-e.deltaY*.0015));return}if(G.mode!=="map")return;e.preventDefault();MAPDIRTY=true;M.z=Math.max(2.2,Math.min(11,M.z-e.deltaY*.002))},{passive:false});
 
 /* ---------- boot ---------- */
 async function start(){
