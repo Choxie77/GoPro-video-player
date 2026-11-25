@@ -126,6 +126,7 @@ body:has(#ownerbar) .toast{bottom:auto;top:16px;z-index:60}
 .card.tsel{outline:3px solid var(--accent);outline-offset:-3px}
 #tagbar{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);z-index:51;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:8px 12px;font-size:13px;box-shadow:0 6px 24px #0008;max-width:calc(100vw - 24px)}#tagbar .btn{padding:4px 10px;font-size:12.5px}#tagbar input{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:4px 8px}
 .ff{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 8px;margin-left:8px;white-space:nowrap}
+#od ol{margin:4px 0 8px;padding-left:20px}#od p{margin:6px 0}#od h4{margin:12px 0 2px}
 </style>
 </head>
 <body>
@@ -706,14 +707,24 @@ function tagBar(){let b=document.getElementById("tagbar");if(!TAG.on){b&&b.remov
         TAG.sel.clear();applyNotes();toast(`${k==="add"?"Tagged":"Untagged"} ${ids.length} clips as ${name}. Everyone sees it on their next visit.`);setTimeout(loadFeed,4000)}
       tagBar();document.querySelectorAll("#grid .card").forEach(c=>c.classList.toggle("tsel",TAG.sel.has(c.dataset.id)))}}
   b.innerHTML=`<b>👤 Tag people</b><span>Tap clips to select them.</span><input id="tagname" value="${esc(document.getElementById("tagname")?.value||"Gaja")}" aria-label="Who is in them" size="10"><span>${TAG.sel.size} selected</span><button class="btn" data-t="all">Select all ${RES.length} shown</button><button class="btn" data-t="clear">Clear</button><button class="btn pri" data-t="add">Tag them</button><button class="btn" data-t="remove">Remove tag</button><button class="btn" data-t="done">Done</button>`}
+function ownerHelp(){dlg(`<h3>Owner guide</h3>
+<h4>👤 Tag people</h4><ol><li>Press <b>👤 Tag people</b> in the bar at the bottom.</li><li>Tap clips to select them (selected clips get an orange outline).</li><li>Make sure the name box says the right name, for example Gaja, then press <b>Tag them</b>.</li><li>Press <b>Done</b> when finished.</li></ol>
+<p><b>Faster:</b> narrow first (a place or date range, for example the days she was there), press <b>Select all N shown</b>, then tap the few clips she isn't in to unselect them. <b>Remove tag</b> undoes a tag on the selected clips.</p>
+<p>Tagged clips are found by searching "gaja" or "with gaja", and a <b>People</b> row with a 👤 chip appears above the cities, for everyone. The tag is kept inside the clip's note, so your own notes stay. Tagging many clips is sent in batches of six, so a few hundred take a short while. Face-scan results, when they exist, add to your tags and never replace them.</p>
+<h4>✎ Title and note</h4><p>The <b>✎</b> button on a clip sets a title and a description that everyone sees and can search.</p>
+<h4>✂ Hide part of a clip</h4><p>Open a clip, then use <b>Hide a part from friends and family</b> under the video: start to now, now to end, or from and to. Friends' players skip those parts and their Download is hidden. It is a skip, not a deletion, and <b>Preview as a friend</b> shows exactly what they get.</p>
+<h4>🚫 Hide a whole clip</h4><p>The red <b>🚫</b> hides a clip in this browser. Press <b>Copy hide command</b> and run it in Terminal in the GoPro Travels Workspace folder to remove those clips for friends.</p>
+<h4>🔔 Inbox and 📊 Stats</h4><p><b>Inbox</b> lists new comments (you also get an email). <b>Stats</b> shows the most watched clips and places and who watches.</p>
+<h4>Friend view</h4><p>Shows the page the way friends see it. Only your two owner Google accounts see these tools.</p>`)}
 function ownerBar(){
   if(!OWNER)return;let b=document.getElementById("ownerbar");if(!b){b=document.createElement("div");b.id="ownerbar";document.body.append(b)}
-  const n=HIDE.size;b.innerHTML=`<b>Owner mode</b><span>${n} clip${n===1?"":"s"} hidden</span><button class="btn" data-o="copy" ${n?"":"disabled"}>Copy hide command</button><button class="btn" data-o="undo" ${n?"":"disabled"}>Undo last</button><button class="btn" data-o="clear" ${n?"":"disabled"}>Show all again</button>${BACK?`<button class="btn" data-o="tag">👤 Tag people</button><button class="btn" data-o="inbox">🔔 Inbox<span id="inboxn"></span></button><button class="btn" data-o="stats">📊 Stats</button>`:""}<button class="btn" data-o="exit" title="See the page the way friends see it">Friend view</button>`;
+  const n=HIDE.size;b.innerHTML=`<b>Owner mode</b><span>${n} clip${n===1?"":"s"} hidden</span><button class="btn" data-o="copy" ${n?"":"disabled"}>Copy hide command</button><button class="btn" data-o="undo" ${n?"":"disabled"}>Undo last</button><button class="btn" data-o="clear" ${n?"":"disabled"}>Show all again</button>${BACK?`<button class="btn" data-o="tag">👤 Tag people</button><button class="btn" data-o="inbox">🔔 Inbox<span id="inboxn"></span></button><button class="btn" data-o="stats">📊 Stats</button>`:""}<button class="btn" data-o="help">? Help</button><button class="btn" data-o="exit" title="See the page the way friends see it">Friend view</button>`;
   pollInbox();
   b.onclick=e=>{const k=e.target.dataset?.o;if(!k)return;
     if(k==="copy"){const cmd="python3 tools/hide_clips.py "+[...HIDE].join(" ");(navigator.clipboard?navigator.clipboard.writeText(cmd):Promise.reject()).then(()=>toast("Copied. Run it in the GoPro Travels Workspace folder."),()=>prompt("Copy this command",cmd))}
     else if(k==="undo"){const l=[...HIDE].pop();HIDE.delete(l);store.set("gtx-hide",[...HIDE]);vocab.v=null;prep();buildDays();render();ownerBar()}
     else if(k==="clear"){HIDE=new Set();store.set("gtx-hide",[]);vocab.v=null;prep();buildDays();render();ownerBar()}
+    else if(k==="help")ownerHelp();
     else if(k==="tag"){TAG.on=!TAG.on;TAG.sel.clear();tagBar();render()}
     else if(k==="inbox")openInbox();
     else if(k==="stats")openStats();
