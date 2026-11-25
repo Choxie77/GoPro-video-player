@@ -930,7 +930,8 @@ async function start(){
 try{navigator.serviceWorker?.register("../sw.js")}catch(e){}   // keeps the page and the saved library so it opens with no signal
 loadToken();
 if(token)start();
-else if(!navigator.onLine&&store.get("gtx-last",null))start();   // offline: show the saved copyelse{$("welcome").hidden=false;$("signin").hidden=false;initGoogle()}
+else if(!navigator.onLine&&store.get("gtx-last",null))start();   // offline: show the saved copy
+else{$("welcome").hidden=false;$("signin").hidden=false;initGoogle()}
 </script>
 </body>
 </html>
