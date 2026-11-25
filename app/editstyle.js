@@ -57,10 +57,62 @@
     #v-estyle .gtae-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     #v-estyle .gtae-btns input[type=text], #v-estyle select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; min-width: 0; }
     #v-estyle .gtae-note { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+
+    #v-estyle .gtae-rules { margin-top: 14px; }
+    #v-estyle .gtae-rgrp { display: grid; gap: 8px; }
+    #v-estyle .gtae-rgrp h4 { margin: 6px 0 0; font-size: 14px; }
+    #v-estyle .gtae-rgrp > .btn { justify-self: start; }
+    #v-estyle .gtae-rule { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+    #v-estyle .gtae-rule input[type=checkbox] { margin-top: 9px; }
+    #v-estyle .gtae-rule textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; line-height: 1.4; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; resize: vertical; overflow: hidden; }
+    #v-estyle .gtae-rule small { color: var(--muted); font-size: 12px; }
   `});
   document.head.append(css);
 
   let cfg = clone(DEFAULT), presets = [], view = null, link = null, dirty = false, built = false;
+
+  // Editing rules: the style Claude follows on every edit (tools/auto_editor.py reads editstyle/playbook,
+  // else config/edit_playbook.json). Defaults are the same list as that file.
+  const PLAYBOOK = [{"id": "story-one", "group": "Story", "text": "One story per video. Find the single thread in what was said (e.g. 'trying not to look like a tourist') and build around it; drop lines that don't serve it. A string of unrelated remarks feels like rambling even when each line is fine.", "from": "Bangkok post, v5 to v6"}, {"id": "story-seen", "group": "Story", "text": "Keep talk about things the viewer can see, or show them right after. Talking about something that never appears on screen is boring.", "from": "Bangkok post, v4 feedback"}, {"id": "story-open", "group": "Story", "text": "Open on the strongest picture or line, with the hook title over it. Hold the opening long enough to read the hook (about 2.5-3 s).", "from": "Bangkok post, v8"}, {"id": "story-end", "group": "Story", "text": "End on a calm picture held 3-4 s (scenery with its own sound), not on a clipped word.", "from": "Bangkok post, v8"}, {"id": "pace-land", "group": "Pacing", "text": "Let every statement land: end a talking shot 0.4-0.8 s after the last word when there is a pause. Never cut on the last syllable or mid-thought.", "from": "Bangkok post, v8"}, {"id": "pace-fewer", "group": "Pacing", "text": "Fewer, longer moments over many quick cuts, so the viewer can take each clip in. Shots under 0.7 s read as glitches.", "from": "Bangkok post, v8"}, {"id": "pace-breather", "group": "Pacing", "text": "When a line runs straight into the next sentence, put a B-roll or scenery shot with its own sound after it as the breather.", "from": "Bangkok post, v8"}, {"id": "broll-show", "group": "B-roll", "text": "When he talks about something (the heat, a market, the traffic, a joke about the area), show it: either as a cover over the talking shot while his voice continues (2.5-3.5 s), or as its own shot right after the line (2.5-4 s).", "from": "Bangkok post, v4 feedback"}, {"id": "broll-dose", "group": "B-roll", "text": "Use B-roll a few times per video, not on every line. Keep his face on screen for the punchline of a joke.", "from": "Bangkok post, v5"}, {"id": "broll-level", "group": "B-roll", "text": "B-roll must be level and steady: straight walls, poles and horizon; not pointing at sky or ceiling; no swinging camera; nobody staring into the lens. Skip tilted footage even if it shows the right thing. Mark B-roll level: auto so a slight tilt is straightened.", "from": "Bangkok post, v6 to v7"}, {"id": "broll-hide", "group": "B-roll", "text": "Use a cover to hide a bad moment in a talking shot (camera looking away, something blocking the lens), starting just before it.", "from": "Bangkok post, v5"}, {"id": "look-cuts", "group": "Look", "text": "Hard cuts only. No fades, zooms, glows, speed ramps or other gimmicks. No emojis.", "from": "standing rule"}, {"id": "look-face", "group": "Look", "text": "Talking to camera: face tracking on so his face stays framed. Showing something or scenery: tracking off and frame the thing.", "from": "Bangkok post, v3 to v4"}, {"id": "look-hook", "group": "Look", "text": "Hook title: at most 6 words at the top, plus an optional short second line for context (e.g. week and place). The key word goes in the theme colour.", "from": "Bangkok post, v5"}, {"id": "subs-theme", "group": "Subtitles", "text": "Theme look: Poppins ExtraBold, capitals, white with a black outline. The 1-2 words that carry each sentence go in the theme colour (yellow #FFD43B), the same colour as the hook's key word.", "from": "Bangkok post, v4 feedback"}, {"id": "subs-lines", "group": "Subtitles", "text": "At most 3 words and one row per line. Never two lines on screen at once. No lone short word on its own line, no line ending on a weak word (a, the, to, I), and a sentence finishes on its own line. No punctuation shown.", "from": "Bangkok post, v4 to v8", "auto": true}, {"id": "subs-pop", "group": "Subtitles", "text": "Lines pop in very slightly (three frames growing to full size). Nothing more animated than that.", "from": "Bangkok post, v7", "auto": true}, {"id": "sound-sfx", "group": "Sound", "text": "Sound effects stay quiet: a soft tick on the hook, a soft whoosh before a few big changes of scene, not on every cut. B-roll keeps its own street sound.", "from": "Bangkok post, v3"}, {"id": "sound-level", "group": "Sound", "text": "Final loudness about -15 to -14 LUFS, background noise removed from his voice.", "from": "standing rule", "auto": true}];
+  let rules = null, rulesDirty = false;
+  const mergeRules = (saved) => {
+    const base = PLAYBOOK.map((r) => ({...r, on: true}));
+    if (!Array.isArray(saved) || !saved.length) return base;
+    const out = saved.map((r) => ({...r}));
+    for (const r of base) if (!out.some((x) => x.id === r.id)) out.push(r);
+    return out;
+  };
+  const fit = (t) => { t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px"; };
+  function rulesSection() {
+    if (!rules) rules = mergeRules(null);
+    const saveBtn = el("button", {className: "btn primary", textContent: rulesDirty ? "Save rules" : "Rules saved", onclick: async () => {
+      await B.db.doc("editstyle/playbook").set({rules, savedAt: new Date().toISOString()});
+      rulesDirty = false; toast("Editing rules saved. Claude follows them on the next edit."); render();
+    }});
+    const markR = () => { rulesDirty = true; saveBtn.textContent = "Save rules"; };
+    const row = (r) => {
+      const ta = el("textarea", {rows: 2, value: r.text, placeholder: "Write the rule in your own words"});
+      ta.style.opacity = r.on === false ? 0.5 : 1;
+      ta.addEventListener("input", () => { r.text = ta.value; fit(ta); markR(); });
+      const cb = el("input", {type: "checkbox", checked: r.on !== false, disabled: !!r.auto, title: r.auto ? "The renderer always does this" : "Claude follows this rule"});
+      cb.addEventListener("change", () => { r.on = cb.checked; ta.style.opacity = r.on ? 1 : 0.5; markR(); });
+      const del = r.custom && el("button", {className: "btn", textContent: "Remove", onclick: () => { rules = rules.filter((x) => x !== r); rulesDirty = true; render(); }});
+      const hint = r.auto ? "The renderer does this by itself" : r.custom ? "Your rule" : r.from ? `Learned from: ${r.from}` : "";
+      return el("div", {className: "gtae-rule"}, cb, el("div", {}, ta, hint && el("small", {}, hint)), del || el("span"));
+    };
+    requestAnimationFrame(() => view.querySelectorAll(".gtae-rules textarea").forEach(fit));
+    const groups = [...new Set(rules.map((r) => r.group))];
+    const add = (g) => el("button", {className: "btn", textContent: "+ Add a rule", onclick: () => {
+      rules.push({id: "u-" + Date.now().toString(36), group: g, text: "", on: true, custom: true}); rulesDirty = true; render();
+      const t = view.querySelectorAll(".gtae-rules textarea"); t[t.length - 1]?.focus();
+    }});
+    const reset = el("button", {className: "btn", textContent: "Back to the learned rules", onclick: () => { rules = mergeRules(null); rulesDirty = true; render(); }});
+    return el("div", {className: "gtae-grp gtae-rules"},
+      el("h3", {}, "Editing rules Claude follows"),
+      el("p", {className: "gtae-note"}, "Your style, learned from your notes on past edits. Claude reads these on every edit: switch one off, reword it or add your own, then save."),
+      el("div", {className: "gtae-btns"}, saveBtn, reset),
+      ...groups.map((g) => el("div", {className: "gtae-rgrp"}, el("h4", {}, g), ...rules.filter((r) => r.group === g).map(row), add(g))));
+  }
   const SAMPLE = ["WANT TO TALK", "ABOUT THIS STREET", "I WENT THERE"];
 
   async function loadSaved() {
@@ -68,6 +120,7 @@
       const s = (await B.db.collection("editstyle").get()).docs.map((d) => ({id: d.id, ...d.data()}));
       const cur = s.find((x) => x.id === "current");
       if (cur) { const {id, ...rest} = cur; cfg = merge(clone(DEFAULT), rest); }
+      rules = mergeRules((s.find((x) => x.id === "playbook") || {}).rules);
       presets = s.filter((x) => x.id.startsWith("p-")).map(({id, ...r}) => ({id, ...r}));
     } catch (e) { /* first run: nothing saved yet */ }
   }
@@ -86,7 +139,7 @@
     cap.textContent = c.uppercase ? words.toUpperCase() : words.toLowerCase();
     cap.style.color = c.fill; cap.style.webkitTextStroke = `${c.stroke_px * 2 / 1920 * 100}cqh ${c.stroke}`;
     cap.style.fontSize = `${c.size / 1920 * 100}cqh`; cap.style.top = `calc(${c.y * 100}% - 0.6em)`;
-    phone.querySelector(".gtae-win").style.left = `${cfg.framing.x * 100}%`;
+    const win = phone.querySelector(".gtae-win"); if (win) win.style.left = `${cfg.framing.x * 100}%`;
   }
 
   function slider([g, k, label, min, max, step, hint]) {
@@ -121,6 +174,7 @@
     }});
     const reset = el("button", {className: "btn", textContent: "Reset", onclick: () => { cfg = clone(DEFAULT); dirty = true; render(); }});
     view.append(el("h2", {}, "Edit style"), el("p", {className: "gtae-note"}, "How edits look and cut. Change something, watch the preview, save. Claude Code reads the saved style for every edit (python3 tools/style_edit.py <video> <out.mp4> --style state)."),
+      rulesSection(),
       el("div", {className: "gtae"},
         el("div", {className: "gtae-ctrl"},
           el("div", {className: "gtae-btns"}, el("button", {id: "gtae-save", className: "btn primary", textContent: dirty ? "Save changes" : "Saved", onclick: save}), sel, nm, saveAs, reset),
