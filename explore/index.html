@@ -175,10 +175,10 @@ const MONTHS=["january","february","march","april","may","june","july","august",
 const store={get:(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 let token=null,tokenExpires=0,tokenClient=null,INDEX=null,CL=[],CH=[],SPR=new Map(),sprUrls=new Map();
 const S={q:"",country:"",place:"",person:"",range:null,sort:"best",shown:60,view:"grid",picks:false,hearts:false,cell:""};
-/* Owner mode (open the page once with ?owner=1, ?owner=0 turns it off): a Hide button on every clip. Hiding only changes this browser;
+/* Owner mode (automatic for the owners' Google accounts): a Hide button on every clip. Hiding only changes this browser;
    "Copy command" gives the line that removes those clips for friends (tools/hide_clips.py rebuilds their index). */
-const OWNER=(()=>{const o=qs.get("owner");if(o==="1")store.set("gtx-owner",true);if(o==="0")store.set("gtx-owner",false);return !!store.get("gtx-owner",false)})();
-let HIDE=new Set(OWNER?store.get("gtx-hide",[]):[]);
+let OWNER=false;   // true for the owners' Google accounts (the backend says so); ?owner=0 previews the friends' view
+let HIDE=new Set(store.get("gtx-hide",[]));
 let HEART=store.get("gtx-hearts",{});   // {clipId:{m:0|1}} saved in this browser only
 
 /* ---------- sign-in (same token slot as the player, so you stay signed in when you open a clip) ---------- */
@@ -257,10 +257,13 @@ function useIndex(data,sheets){INDEX=data;SPR=new Map(sheets);prep();FIX.clear()
 /* Journey backend (comments, Adam's notes, stats): a Google Apps Script in Adam's account, address comes with the index. Without it all of this stays hidden. */
 let BACK="",FEED={comments:{},notes:{}};
 function setBackend(u){BACK=u||"";store.set("gtj-backend",BACK);if(BACK)loadFeed()}
-async function loadFeed(){try{const r=await fetch(BACK+"?action=feed");FEED=await r.json();FEED.comments=FEED.comments||{};FEED.notes=FEED.notes||{};applyNotes()}catch(e){}}
+const tk=()=>encodeURIComponent(token||"");
+async function loadFeed(){try{
+  if(!OWNER&&qs.get("owner")!=="0"){const w=await (await fetch(`${BACK}?action=whoami&token=${tk()}`)).json();if(w.owner){OWNER=true;prep();buildDays();ownerBar()}}
+  const r=await (await fetch(`${BACK}?action=feed&token=${tk()}`)).json();if(r.error)return;FEED=r;FEED.comments=FEED.comments||{};FEED.notes=FEED.notes||{};applyNotes()}catch(e){}}
 function applyNotes(){let ch=false;for(const c of INDEX.clips){const n=FEED.notes[c.id];if(n&&(n.title!==c.title||n.desc!==c.desc)){c.title=n.title||c.title;c.desc=n.desc||c.desc;ch=true}}
   if(ch){vocab.v=null;prep();buildDays()}try{render()}catch(e){}}
-const postBack=d=>fetch(BACK,{method:"POST",mode:"no-cors",body:JSON.stringify(d)}).catch(()=>{});
+const postBack=d=>fetch(BACK,{method:"POST",mode:"no-cors",body:JSON.stringify({...d,token})}).catch(()=>{});
 const noteLine=c=>{const n=FEED.notes[c.id],k=(FEED.comments[c.id]||[]).length;return (n&&n.desc?`<em class="note">${esc(n.desc.slice(0,90))}</em>`:"")+(k?`<span class="cm">💬 ${k}</span>`:"")};
 async function loadIndex(){
   const last=store.get("gtx-last",null),hit=last&&await cget(last.key);
@@ -285,6 +288,10 @@ const PLACE_RULES=[
   // Hong Kong and Shenzhen, dated from what Adam says in the clips (first HK clip 6 Jun 16:02, "leaving Hong Kong" 8 Jun, Shenzhen until ~14 Jun); the camera still said Guangzhou
   {label:"Hong Kong",country:"Hong Kong",cc:"HK",region:"Hong Kong",test:c=>c.t>="2026-06-06T14:00"&&c.t<"2026-06-08T13:00",lat:22.3,lon:114.17,tags:["hk","hongkong"]},
   {label:"Shenzhen",country:"China",cc:"CN",region:"Shenzhen",test:c=>c.t>="2026-06-08T13:00"&&c.t<"2026-06-15",lat:22.54,lon:114.06,tags:["guangdong"]},
+  // Ho Chi Minh City, Mui Ne and Nha Trang were all filed as Ho Chi Minh City (stale GPS). Dated from the footage itself (frames, 25 Nov 2026):
+  // the sleeper bus leaves HCMC 11 Feb ~12:30 (GX011451), sand dunes and the fishing harbour on 12 Feb, a bus stop on 13 Feb evening, the Nha Trang seafront from 14 Feb 17:17.
+  {label:"Mui Ne",city:"Mui Ne",region:"Binh Thuan",chapter:false,test:c=>c.country==="Viet Nam"&&c.t>="2026-02-11T12:00"&&c.t<"2026-02-14T12:00",lat:10.94,lon:108.29,tags:["mui ne","muine","phan thiet","binh thuan","sand dunes","dunes","jeep","fishing village","sleeper bus"]},
+  {label:"Nha Trang",city:"Nha Trang",region:"Khanh Hoa",chapter:false,test:c=>c.country==="Viet Nam"&&c.t>="2026-02-14T12:00"&&c.t<"2026-02-17T05:00",tags:["nha trang","khanh hoa"]},
   // second Hoi An visit (15-17 Mar, with his sister), then Hanoi from 18 Mar
   {label:"Hoi An",city:"Hoi An",region:"Quang Nam",chapter:false,test:c=>c.country==="Viet Nam"&&c.city==="Da Nang"&&c.t>="2026-03-15"&&c.t<"2026-03-18",lat:15.88,lon:108.34},
   {label:"Hanoi",city:"Hanoi",region:"Ha Noi",chapter:false,test:c=>c.country==="Viet Nam"&&c.city==="Da Nang"&&c.t>="2026-03-18"&&c.t<"2026-03-27",lat:null,lon:null}
@@ -314,7 +321,11 @@ function prep(){
   // chapters: consecutive stops in the same place, with a position from the clips recorded there
   const byLabel=(l,a,b)=>CL.filter(c=>c.o.label===l&&c.o.date>=a&&c.o.date<=b&&c.lat!=null);
   const raw=(INDEX.stops||[]).filter(s=>!s.before_trip).map(s=>({label:placeLabel(s.city,s.area),country:s.country,cc:s.cc,a:s.start.slice(0,10),b:s.end.slice(0,10),secs:s.seconds,n:s.clips}));
-  for(let i=0;i<raw.length;i++){const st=raw[i];   // the long Da Nang stop was really Da Nang, a second Hoi An visit (15-17 Mar), then Hanoi
+  for(let i=0;i<raw.length;i++){const st=raw[i];   // the Ho Chi Minh City stop also holds Mui Ne (11-13 Feb) and the first Nha Trang day (14 Feb)
+    if(st.label==="Ho Chi Minh City"&&st.cc==="VN"&&st.a<="2026-02-10"&&st.b>="2026-02-14"){
+      const part=(l,a,b)=>{const x=CL.filter(c=>c.o.label===l&&c.o.date>=a&&c.o.date<=b);return{label:l,country:st.country,cc:st.cc,a,b,secs:x.reduce((t,c)=>t+c.dur,0),n:x.length}};
+      const hc=CL.filter(c=>c.o.label==="Ho Chi Minh City"&&c.o.date>=st.a&&c.o.date<=st.b);
+      raw.splice(i+1,0,part("Mui Ne","2026-02-11","2026-02-13"),part("Nha Trang","2026-02-14","2026-02-14"));st.b="2026-02-11";st.secs=hc.reduce((t,c)=>t+c.dur,0);st.n=hc.length}   // the long Da Nang stop was really Da Nang, a second Hoi An visit (15-17 Mar), then Hanoi
     if(st.label==="Da Nang"&&st.country==="Viet Nam"&&st.a<="2026-03-14"&&st.b>="2026-03-18"){
       const part=(l,a,b)=>{const x=CL.filter(c=>c.o.label===l&&c.o.date>=a&&c.o.date<=b);return{label:l,country:st.country,cc:st.cc,a,b,secs:x.reduce((t,c)=>t+c.dur,0),n:x.length}};
       raw.splice(i+1,0,part("Hoi An","2026-03-15","2026-03-17"),part("Hanoi","2026-03-18",st.b));st.b="2026-03-14";break}}
@@ -614,11 +625,10 @@ $("grid").addEventListener("click",e=>{
   const d=e.target.closest(".dayh");if(d){S.range=[d.dataset.d,d.dataset.d];S.view="grid";render();const c=CH.find(x=>x.a<=d.dataset.d&&x.b>=d.dataset.d);if(c)flyTo(c.lon,c.lat);return}
   const b=e.target.closest(".card");if(!b)return;const i=+b.dataset.i;openList(RES,i,RES[i]._sn?.a)});
 $("grid").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.classList.contains("card"))e.target.click()});
-const okey=()=>{let k=store.get("gtx-okey","");if(!k){k=prompt("Your owner key (the OWNER_KEY from the Journey backend)")||"";if(k)store.set("gtx-okey",k)}return k};
-async function ownerGet(a,extra=""){const k=okey();if(!k)return null;const r=await (await fetch(`${BACK}?action=${a}&key=${encodeURIComponent(k)}${extra}`)).json();if(r.error){store.set("gtx-okey","");toast("That owner key was not accepted.");return null}return r}
+async function ownerGet(a,extra=""){const r=await (await fetch(`${BACK}?action=${a}&token=${tk()}${extra}`)).json();if(r.error){toast("Only your owner accounts can open this.");return null}return r}
 function dlg(html){let d=document.getElementById("od");if(!d){d=document.createElement("dialog");d.id="od";document.body.append(d)}d.innerHTML=html+`<p style="text-align:right;margin:8px 0 0"><button class="btn" id="odx">Close</button></p>`;d.querySelector("#odx").onclick=()=>d.close();d.showModal();return d}
 let inboxT=null;
-async function pollInbox(){clearInterval(inboxT);if(!OWNER||!BACK||!store.get("gtx-okey",""))return;
+async function pollInbox(){clearInterval(inboxT);if(!OWNER||!BACK)return;
   const go=async()=>{try{const r=await ownerGet("inbox","&since="+encodeURIComponent(store.get("gtx-seen","1970-01-01")));const n=r?.comments?.length||0,e=document.getElementById("inboxn");if(e)e.textContent=n?` (${n} new)`:""}catch(e){}};
   go();inboxT=setInterval(go,60000)}
 async function openInbox(){const r=await ownerGet("inbox","&since="+encodeURIComponent(store.get("gtx-seen","1970-01-01")));if(!r)return;
@@ -627,17 +637,17 @@ async function openInbox(){const r=await ownerGet("inbox","&since="+encodeURICom
   store.set("gtx-seen",new Date().toISOString());const e=document.getElementById("inboxn");if(e)e.textContent="";
   d.onclick=ev=>{const a=ev.target.closest("[data-clip]"),x=ev.target.closest("[data-del]");
     if(a){ev.preventDefault();const c=INDEX.byId.get(a.dataset.clip);if(c)openList([c],0,Number(a.dataset.t)||0)}
-    if(x){postBack({action:"hide_comment",key:store.get("gtx-okey",""),id:x.dataset.del});x.closest(".cmt").remove();setTimeout(loadFeed,1500)}}}
+    if(x){postBack({action:"hide_comment",id:x.dataset.del});x.closest(".cmt").remove();setTimeout(loadFeed,1500)}}}
 async function openStats(){const r=await ownerGet("stats");if(!r)return;
   const tb=(h,rows)=>`<h4 style="margin:10px 0 4px">${h}</h4><table>${rows.map(x=>`<tr><td>${esc(x.label||x.k)}</td><td>${x.n}</td></tr>`).join("")||"<tr><td>Nothing yet</td><td></td></tr>"}</table>`;
   dlg(`<h3>Who watches what</h3><p><b>${r.totals.views}</b> views · <b>${r.totals.viewers}</b> named viewers · <b>${r.totals.comments}</b> comments</p>${tb("Most watched clips",r.topClips)}${tb("Most watched places",r.topPlaces)}${tb("Most active viewers",r.topViewers)}${tb("Most commented",r.mostCommented)}${tb("Views per day (last 30 days)",r.perDay)}<h4 style="margin:10px 0 4px">Latest views</h4><table>${r.recent.map(x=>`<tr><td>${esc(x.name||"Someone")} watched ${esc(x.label)}</td><td>${esc(x.ts.slice(5,16).replace("T"," "))}</td></tr>`).join("")}</table>`)}
 function editNote(id){const c=INDEX.byId.get(id),n=FEED.notes[id]||{};
   const t=prompt("Title for friends (empty keeps the automatic one)",n.title||c.title||"");if(t===null)return;
   const d=prompt("Your description or note for this moment",n.desc||c.desc||"");if(d===null)return;
-  const k=okey();if(!k)return;postBack({action:"note",key:k,clip:id,title:t,desc:d});FEED.notes[id]={title:t,desc:d};applyNotes();toast("Saved. Everyone sees it on their next visit.")}
+  postBack({action:"note",clip:id,title:t,desc:d});FEED.notes[id]={title:t,desc:d};applyNotes();toast("Saved. Everyone sees it on their next visit.")}
 function ownerBar(){
   if(!OWNER)return;let b=document.getElementById("ownerbar");if(!b){b=document.createElement("div");b.id="ownerbar";document.body.append(b)}
-  const n=HIDE.size;b.innerHTML=`<b>Owner mode</b><span>${n} clip${n===1?"":"s"} hidden</span><button class="btn" data-o="copy" ${n?"":"disabled"}>Copy hide command</button><button class="btn" data-o="undo" ${n?"":"disabled"}>Undo last</button><button class="btn" data-o="clear" ${n?"":"disabled"}>Show all again</button>${BACK?`<button class="btn" data-o="inbox">🔔 Inbox<span id="inboxn"></span></button><button class="btn" data-o="stats">📊 Stats</button>`:""}<button class="btn" data-o="exit">Exit</button>`;
+  const n=HIDE.size;b.innerHTML=`<b>Owner mode</b><span>${n} clip${n===1?"":"s"} hidden</span><button class="btn" data-o="copy" ${n?"":"disabled"}>Copy hide command</button><button class="btn" data-o="undo" ${n?"":"disabled"}>Undo last</button><button class="btn" data-o="clear" ${n?"":"disabled"}>Show all again</button>${BACK?`<button class="btn" data-o="inbox">🔔 Inbox<span id="inboxn"></span></button><button class="btn" data-o="stats">📊 Stats</button>`:""}<button class="btn" data-o="exit" title="See the page the way friends see it">Friend view</button>`;
   pollInbox();
   b.onclick=e=>{const k=e.target.dataset?.o;if(!k)return;
     if(k==="copy"){const cmd="python3 tools/hide_clips.py "+[...HIDE].join(" ");(navigator.clipboard?navigator.clipboard.writeText(cmd):Promise.reject()).then(()=>toast("Copied. Run it in the GoPro Travels Workspace folder."),()=>prompt("Copy this command",cmd))}
@@ -645,7 +655,7 @@ function ownerBar(){
     else if(k==="clear"){HIDE=new Set();store.set("gtx-hide",[]);vocab.v=null;prep();buildDays();render();ownerBar()}
     else if(k==="inbox")openInbox();
     else if(k==="stats")openStats();
-    else if(k==="exit"){store.set("gtx-owner",false);location.search="";}}
+    else if(k==="exit"){const q=new URLSearchParams(location.search);q.set("owner","0");location.search=q.toString()}}
 }
 $("rnd").onclick=()=>{   // a shuffled queue of whatever is showing, starting on a random clip
   if(!RES.length)return;const a=RES.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}openList(a,0)};
