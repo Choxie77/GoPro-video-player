@@ -1,16 +1,38 @@
 // Streams a Google Drive file to the page's <video> with HTTP range requests, adding the sign-in token.
 // URL shape handled: <scope>/stream/<fileId>?t=<access token>[&api=<test api base>]
-// Nothing is cached or written to disk beyond the browser's normal media buffer.
+// Also: keeps the app pages (player, explore) so they open with no signal, and holds clips people chose to "Save offline"
+// (the small Light copy) in the browser's Cache Storage; those play back from there with no network.
 const API = "https://www.googleapis.com/drive/v3/files/";
 const sizes = new Map(); // fileId -> total bytes (to rebuild Content-Range if the API hides it)
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
+const SHELL = "gtp-shell-v1", OFF = "gtp-offline-v1";
+const offKey = (id) => new Request(self.registration.scope + "offline/" + id);
+async function fromOffline(id, range) {
+  const hit = await (await caches.open(OFF)).match(offKey(id));
+  if (!hit) return null;
+  const blob = await hit.blob(), size = blob.size, h = {"Content-Type": "video/mp4", "Accept-Ranges": "bytes"};
+  const m = /bytes=(\d*)-(\d*)/.exec(range || "");
+  if (!m) return new Response(blob, {status: 200, headers: {...h, "Content-Length": size}});
+  const a = m[1] === "" ? Math.max(0, size - Number(m[2])) : Number(m[1]), b = m[1] !== "" && m[2] !== "" ? Math.min(size - 1, Number(m[2])) : size - 1;
+  return new Response(blob.slice(a, b + 1), {status: 206, headers: {...h, "Content-Range": `bytes ${a}-${b}/${size}`, "Content-Length": b - a + 1}});
+}
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin) return;
   const m = url.pathname.match(/\/stream\/([A-Za-z0-9_-]+)$/);
-  if (!m || url.origin !== self.location.origin) return;
+  if (!m) {   // app pages and small static files: newest from the network, the saved copy when there is no signal
+    if (e.request.method !== "GET" || !/(\/|\.html|\.json|\.svg|\.webmanifest)$/.test(url.pathname) || url.searchParams.get("api")) return;
+    e.respondWith(fetch(e.request).then((r) => { if (r.ok) { const c = r.clone(); caches.open(SHELL).then((ch) => ch.put(e.request, c)); } return r; })
+      .catch(() => caches.match(e.request, {ignoreSearch: true}).then((r) => r || Response.error())));
+    return;
+  }
+  if (!url.searchParams.get("dl")) {
+    e.respondWith(fromOffline(m[1], e.request.headers.get("Range")).then((r) => r || stream(m[1], url.searchParams.get("t"), url.searchParams.get("api") || API, e.request.headers.get("Range"), null)));
+    return;
+  }
   e.respondWith(stream(m[1], url.searchParams.get("t"), url.searchParams.get("api") || API, e.request.headers.get("Range"), url.searchParams.get("dl")));
 });
 
@@ -52,3 +74,21 @@ async function stream(id, token, api, range, dl) {
   }
   return new Response(r.body, {status: r.status, statusText: r.statusText, headers: out});
 }
+
+// Messages from the pages: {type:"save", id, token, api} / {type:"unsave", id} / {type:"list"}; answers {type:"offline", ids:[...]} (and "saving" / "error")
+async function offlineIds() { return (await (await caches.open(OFF)).keys()).map((r) => r.url.split("/offline/")[1]); }
+async function tell(msg) { for (const c of await self.clients.matchAll()) c.postMessage(msg); }
+self.addEventListener("message", (e) => {
+  const d = e.data || {};
+  e.waitUntil((async () => {
+    if (d.type === "save") {
+      await tell({type: "saving", id: d.id});
+      try {
+        const r = await fetch(`${d.api || API}${d.id}?alt=media&supportsAllDrives=true`, {headers: {Authorization: `Bearer ${d.token}`}});
+        if (!r.ok) throw new Error(r.status);
+        await (await caches.open(OFF)).put(offKey(d.id), new Response(await r.blob(), {headers: {"Content-Type": "video/mp4"}}));
+      } catch (err) { await tell({type: "error", id: d.id}); }
+    } else if (d.type === "unsave") await (await caches.open(OFF)).delete(offKey(d.id));
+    await tell({type: "offline", ids: await offlineIds()});
+  })());
+});

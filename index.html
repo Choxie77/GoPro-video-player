@@ -30,6 +30,7 @@ h2 { font: 700 17px/1.25 var(--display); margin: 0; }
 button, select, input { font: inherit; color: inherit; }
 .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 12px; cursor: pointer; font-weight: 600; white-space: nowrap; }
 .btn:hover { border-color: var(--accent); }
+a.btn { color: inherit; text-decoration: none; display: inline-block; }
 .btn.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .btn:disabled { opacity: .4; cursor: default; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -123,6 +124,11 @@ kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 
 .sendp .msg { font-size: 13px; min-height: 1.4em; }
 .sendp .msg.bad { color: var(--bad); }
 .mbar input[type=range] { flex: 1 1 260px; accent-color: var(--accent); min-width: 0; }
+.cmts{display:grid;gap:8px;max-width:760px}.cmts h3{margin:0;font:700 15px var(--display)}
+.note-desc{margin:0;padding:10px 12px;background:var(--panel);border-left:3px solid var(--accent);border-radius:8px}
+.cmt{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px}.cmt small{color:var(--muted)}.cmt a{color:var(--accent);cursor:pointer}
+.cform{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.cform input[type=text]{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0}
+#cname{width:140px}#ctext{flex:1;min-width:180px}
 </style>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -193,6 +199,7 @@ kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 
           <span class="grow"></span>
           <button class="btn" id="share" title="Copy a link to this clip (S)">⤴ Share</button>
           <button class="btn" id="send" title="Cut a section, then copy or save it as a small file to send (C)" aria-expanded="false">✂ Send clip</button>
+          <button class="btn" id="offl" title="Keep the small Light copy on this phone so it plays with no signal">💾 Save offline</button>
           <span class="dlmenu"><button class="btn" id="dl" title="Save this clip to your device (D)" aria-haspopup="true">⬇ Download</button><div class="pop" id="dlpop" hidden></div></span>
           <label class="toggle"><input type="checkbox" id="auto" checked> Play next automatically</label>
         </div>
@@ -212,6 +219,17 @@ kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 
           <p class="msg muted" id="s-msg" role="status"></p>
         </div>
         <div style="display:grid;gap:4px"><p class="title" id="title"></p><p class="info muted mono" id="info"></p></div>
+        <section id="cmts" class="cmts" hidden>
+          <p class="note-desc" id="cnote" hidden></p>
+          <h3>Comments <span class="muted" id="ccount"></span></h3>
+          <div id="clist"></div>
+          <form id="cform" class="cform">
+            <input type="text" id="cname" placeholder="Your name" maxlength="40" aria-label="Your name">
+            <input type="text" id="ctext" placeholder="Write a comment about this moment…" maxlength="1000" aria-label="Comment">
+            <label class="muted"><input type="checkbox" id="cat" checked> at <span id="catt">0:00</span></label>
+            <button class="btn primary" type="submit">Post</button>
+          </form>
+        </section>
         <p class="keys muted"><kbd>K</kbd>/<kbd>Space</kbd> play · <kbd>J</kbd> <kbd>L</kbd> ±5 s · <kbd>←</kbd> <kbd>→</kbd> ±1 s · <kbd>,</kbd> <kbd>.</kbd> one frame · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Light / HD / Full · <kbd>P</kbd> <kbd>N</kbd> previous / next · <kbd>S</kbd> share · <kbd>D</kbd> download · <kbd>C</kbd> send clip · <kbd>F</kbd> full screen</p>
       </div>
       <aside id="queue" aria-label="Queue"></aside>
@@ -224,6 +242,7 @@ kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 
       <div class="bar mbar">
         <button class="btn primary" id="m-play">▶ Play all</button>
         <button class="btn" id="m-restart">⟲ From start</button>
+        <button class="btn" id="m-shuffle" title="Four other random clips">🎲 Shuffle 4</button>
         <input type="range" id="m-seek" min="0" max="100" step="0.1" value="0" aria-label="Position in all clips">
         <span class="mono muted" id="m-time" style="font-size:13px">0:00</span>
         <div class="seg" role="group" aria-label="Multi-view quality"><button id="m-light">Light</button><button id="m-hd">HD</button></div>
@@ -359,7 +378,24 @@ function show(v) {
   if (v !== "play") va().pause();
   if (v !== "multi") tiles.forEach((t) => t.v.pause());
   if (v === "lib") renderLib();
+  if (v === "multi" && !tiles.length && !show.noAuto) autoMulti();
+  if (typeof paintComments === "function") paintComments();
 }
+/* Multi-view should never open empty: use the picked clips, else the queue, else four random clips from the library. */
+function randomItems(n) {
+  const pool = INDEX ? [...INDEX.byId.values()].map(itemFromClip) : items.slice();
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  return pool.slice(0, n);
+}
+function autoMulti(fresh) {
+  let list = [];
+  if (!fresh && typeof selected !== "undefined" && selected.length >= 2 && INDEX) list = selected.slice(0, 4).map((id) => itemFromClip(INDEX.byId.get(id)));
+  else if (!fresh && items.length >= 2) list = items.slice(idx, idx + 4).concat(items.slice(0, Math.max(0, 4 - (items.length - idx)))).slice(0, 4);
+  if (list.length < 2) list = randomItems(4);
+  if (!list.length) { $("mgrid").innerHTML = `<p class="muted" style="grid-column:1/-1">The library is still loading. Try again in a moment.</p>`; return; }
+  openMulti(list);
+}
+$("m-shuffle").onclick = () => autoMulti(true);
 document.querySelectorAll("nav.tabs button").forEach((b) => b.onclick = () => show(b.dataset.v));
 
 /* ================= LIBRARY ================= */
@@ -527,7 +563,7 @@ function load(keepTime) {
     $(btn).disabled = !it[k]; $(btn).setAttribute("aria-pressed", key === k);
   }
   $("prev").disabled = idx === 0; $("next").disabled = idx >= items.length - 1;
-  note(""); drawQueue(); writeHash();
+  note(""); drawQueue(); writeHash(); paintOffline();
   preloadNext();
 }
 function preloadNext() {
@@ -646,6 +682,26 @@ function toggleSend(open) {
   fetch(HELPER + "/ping").then((r) => r.json()).then((j) => { if (!j.ffmpeg) sMsg("The helper is running but ffmpeg wasn't found on this Mac.", true); })
     .catch(() => sMsg("The helper isn't set up yet. Once, in Terminal, in the GoPro Travels Workspace folder, run  python3 tools/clip_helper.py --install  and then try again.", true));
 }
+/* Save offline: the service worker keeps the Light copy (else HD) in this browser; Explore and the player open with no signal too. */
+const OFFLINE = new Set();
+function offlineId(it) { return it && (it.light || it.hd); }
+function paintOffline(saving) {
+  const it = items[idx], id = offlineId(it), b = $("offl");
+  b.hidden = !id; if (!id) return;
+  b.textContent = saving === id ? "Saving…" : OFFLINE.has(id) ? "✓ Saved offline" : "💾 Save offline";
+  b.setAttribute("aria-pressed", OFFLINE.has(id));
+}
+navigator.serviceWorker?.addEventListener("message", (e) => {
+  const d = e.data || {};
+  if (d.type === "offline") { OFFLINE.clear(); d.ids.forEach((x) => OFFLINE.add(x)); paintOffline(); }
+  else if (d.type === "saving") paintOffline(d.id);
+  else if (d.type === "error") { toast("Couldn't save it offline. Check your connection."); paintOffline(); }
+});
+$("offl").onclick = () => {
+  const id = offlineId(items[idx]), sw = navigator.serviceWorker?.controller; if (!id || !sw) return toast("Offline saving isn't available in this browser.");
+  if (OFFLINE.has(id)) { sw.postMessage({type: "unsave", id}); toast("Removed from this phone"); }
+  else { sw.postMessage({type: "save", id, token, api: TEST_API || undefined}); toast("Saving the clip to this phone…"); }
+};
 $("send").onclick = () => toggleSend();
 $("send").hidden = true;
 fetch(HELPER + "/ping").then((r) => r.json()).then(() => { $("send").hidden = false; }).catch(() => {});   // only on the Mac that runs the helper
@@ -675,7 +731,7 @@ $("s-copy").onclick = () => sendClip("copy"); $("s-save").onclick = () => sendCl
 /* ================= MULTI-VIEW ================= */
 let tiles = [], mQuality = store.get("gtp-mq", "light");
 function openMulti(list) {
-  show("multi");
+  show.noAuto = true; show("multi"); show.noAuto = false;
   tiles.forEach((t) => { t.v.pause(); t.v.removeAttribute("src"); t.v.load(); });
   const grid = $("mgrid"); grid.innerHTML = ""; grid.className = "mgrid" + (list.length === 1 ? " n1" : "");
   tiles = list.slice(0, 4).map((it, i) => {
@@ -734,10 +790,11 @@ async function signedIn() {
   $("who").textContent = TEST_API ? "Test mode" : "Signed in"; $("signin").hidden = true; $("welcome").hidden = true; note("");
   proxyReady = proxyReady || registerProxy();
   useProxy = await proxyReady;
+  navigator.serviceWorker?.controller?.postMessage({type: "list"});
   const {list, i} = readHash();
   if (list.length) { items = list; idx = Math.max(0, Math.min(i, items.length - 1)); show("play"); load(false); }
   else show("lib");
-  loadIndex().then(() => {
+  loadIndex().catch(() => {}).then(() => {
     const h = new URLSearchParams(location.hash.slice(1)), cid = h.get("clip");   // a shared link: open straight on that clip
     if (cid && !list.length) {
       const c = INDEX?.byId.get(cid);
@@ -747,9 +804,45 @@ async function signedIn() {
     if (view === "lib") renderLib(); if (items.length) drawQueue();
   });
 }
+/* ================= COMMENTS, notes and view counts (the Journey backend; only when Explore has handed over its address) ================= */
+const BACK = store.get("gtj-backend", "");
+let FEED = {comments: {}, notes: {}}; const viewed = new Set();
+const cidOf = (it) => it && (it.cid || it.clip?.id || "");
+const myName = () => store.get("gtj-name", "");
+async function loadFeed() { if (!BACK) return; try { FEED = await (await fetch(BACK + "?action=feed")).json(); FEED.comments = FEED.comments || {}; FEED.notes = FEED.notes || {}; } catch (e) {} paintComments(); }
+function paintComments() {
+  const it = items[idx], id = cidOf(it), box = $("cmts");
+  box.hidden = !BACK || !id || view !== "play"; if (box.hidden) return;
+  const n = FEED.notes[id], list = FEED.comments[id] || [];
+  $("cnote").hidden = !(n && (n.desc || n.title)); $("cnote").textContent = n ? [n.title, n.desc].filter(Boolean).join(" · ") : "";
+  $("ccount").textContent = list.length ? `· ${list.length}` : "";
+  $("clist").innerHTML = list.map((c) => `<div class="cmt"><b>${esc(c.name)}</b>${c.sec ? ` <a data-sec="${c.sec}">at ${fmt(c.sec)}</a>` : ""}<br>${esc(c.text)}<br><small>${esc(String(c.ts).slice(0, 10))}</small></div>`).join("");
+  $("cname").value = myName();
+}
+$("clist").onclick = (e) => { const a = e.target.closest("[data-sec]"); if (a) { va().currentTime = Number(a.dataset.sec); va().play().catch(() => {}); } };
+setInterval(() => { $("catt").textContent = fmt(va().currentTime || 0); }, 500);
+$("cform").onsubmit = (e) => {
+  e.preventDefault();
+  const it = items[idx], id = cidOf(it), text = $("ctext").value.trim(), name = $("cname").value.trim();
+  if (!text || !id) return; if (!name) { $("cname").focus(); return toast("Add your name so Adam knows who wrote it."); }
+  store.set("gtj-name", name);
+  const sec = $("cat").checked ? Math.floor(va().currentTime || 0) : 0;
+  fetch(BACK, {method: "POST", mode: "no-cors", body: JSON.stringify({action: "comment", clip: id, label: it.title, sec, name, text})}).catch(() => {});
+  (FEED.comments[id] = FEED.comments[id] || []).push({id: "x" + Date.now(), ts: new Date().toISOString(), sec, name, text});
+  $("ctext").value = ""; paintComments(); toast("Posted. Adam gets a message.");
+};
+// count a view once per clip and visit, after it has really played for 3 seconds
+vids.forEach((v) => v.addEventListener("timeupdate", () => {
+  if (!BACK || v !== va() || v.currentTime < 3 || v.paused) return;
+  const it = items[idx], id = cidOf(it); if (!id || viewed.has(id)) return; viewed.add(id);
+  fetch(BACK, {method: "POST", mode: "no-cors", body: JSON.stringify({action: "view", clip: id, label: it.title, name: myName()})}).catch(() => {});
+}));
+const _paintOffline = paintOffline; paintOffline = function (s) { _paintOffline(s); paintComments(); };
+if (BACK) loadFeed();
 addEventListener("hashchange", () => { const {list, i} = readHash(); if (list.length && token && list.map((x) => [x.orig, x.start, x.end].join()).join() !== items.map((x) => [x.orig, x.start, x.end].join()).join()) { items = list; idx = i; show("play"); load(false); } });
 loadToken();
 if (token) signedIn();
+else if (!navigator.onLine && location.hash.includes("list=")) { token = "offline"; tokenExpires = Date.now() + 864e5; signedIn(); }   // no signal: saved clips still play
 else { $("welcome").hidden = false; $("signin").hidden = false; initGoogle(); }
 </script>
 </body>

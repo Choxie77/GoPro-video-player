@@ -32,7 +32,7 @@ main{max-width:1240px;margin:0 auto;padding:16px}
 .search input{flex:1;border:0;background:none;font-size:18px;padding:10px 0;outline:none;min-width:0}
 .hints{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0;align-items:center;color:var(--mute);font-size:13px}
 *{scrollbar-color:var(--line) transparent}
-#pbar[hidden]{display:none}.chip.zero{opacity:.45}
+#pbar[hidden],#ppbar[hidden]{display:none}#ppbar{gap:6px;align-items:center}#ppbar .chip{font-size:12.5px;padding:3px 10px}#ppbar .plab{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;margin-right:4px}#ppbar .chip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}.chip.zero{opacity:.45}
 #pbar{gap:6px;align-items:center}#pbar .chip{font-size:12.5px;padding:3px 10px}#pbar .plab{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;margin-right:4px}#pbar .chip small{margin-left:5px;opacity:.7}#pbar .chip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}#pbar .more{background:none;border-style:dashed;color:var(--mute)}
 .chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px 12px;cursor:pointer;font-size:13px}
 .chip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -99,6 +99,8 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:10px;font-size:14px;z-index:9}
 .card .ic button[data-act=hide]{background:#a33}
 #ownerbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:50;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:8px 12px;font-size:13px;box-shadow:0 6px 24px #0008;max-width:calc(100vw - 24px)}#ownerbar .btn{padding:4px 10px;font-size:12.5px}
+.card .note{display:block;font-style:normal;color:var(--mute);font-size:12px;margin-top:2px}.card .cm{display:inline-block;margin-top:2px;font-size:12px;color:var(--accent)}
+#od{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;max-width:min(680px,94vw);width:100%;max-height:86vh;padding:16px}#od::backdrop{background:#000a}#od h3{margin:0 0 8px}#od table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px}#od td{padding:3px 6px;border-bottom:1px solid var(--line)}#od td:last-child{text-align:right;color:var(--mute)}#od .cmt{border-bottom:1px solid var(--line);padding:8px 0}#od .cmt small{color:var(--mute)}
 </style>
 </head>
 <body>
@@ -145,6 +147,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-
       <button class="chip" id="calb" aria-pressed="false" type="button">📅 Dates</button><button class="chip" id="fp" aria-pressed="false" type="button">Adam's picks</button><button class="chip" id="fh" aria-pressed="false" type="button">My hearts</button>
       <label style="font-size:13px;color:var(--mute)">Sort <select id="sort"><option value="best">Best match</option><option value="new">Newest first</option><option value="old">Oldest first</option><option value="long">Longest first</option></select></label></div></div>
   <div class="hints" id="cbar" style="margin:0 0 12px" aria-label="Filter by country"></div>
+  <div class="hints" id="ppbar" style="margin:0 0 10px" aria-label="Filter by person" hidden></div>
   <div class="hints" id="pbar" style="margin:0 0 12px" aria-label="Filter by city" hidden></div>
   <div class="grid" id="grid"></div>
   <p class="empty" id="more" hidden><button class="btn" id="moreb">Show more</button></p>
@@ -171,7 +174,7 @@ const API=TEST_API||"https://www.googleapis.com/drive/v3/files/";
 const MONTHS=["january","february","march","april","may","june","july","august","september","october","november","december"];
 const store={get:(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 let token=null,tokenExpires=0,tokenClient=null,INDEX=null,CL=[],CH=[],SPR=new Map(),sprUrls=new Map();
-const S={q:"",country:"",place:"",range:null,sort:"best",shown:60,view:"grid",picks:false,hearts:false,cell:""};
+const S={q:"",country:"",place:"",person:"",range:null,sort:"best",shown:60,view:"grid",picks:false,hearts:false,cell:""};
 /* Owner mode (open the page once with ?owner=1, ?owner=0 turns it off): a Hide button on every clip. Hiding only changes this browser;
    "Copy command" gives the line that removes those clips for friends (tools/hide_clips.py rebuilds their index). */
 const OWNER=(()=>{const o=qs.get("owner");if(o==="1")store.set("gtx-owner",true);if(o==="0")store.set("gtx-owner",false);return !!store.get("gtx-owner",false)})();
@@ -250,7 +253,15 @@ async function fetchIndex(f){
   cput(idxKey(f),data,"application/json");store.set("gtx-last",{key:idxKey(f),sheets});
   return{data:JSON.parse(data),sheets};
 }
-function useIndex(data,sheets){INDEX=data;SPR=new Map(sheets);prep();FIX.clear();vocab.v=null}
+function useIndex(data,sheets){INDEX=data;SPR=new Map(sheets);prep();FIX.clear();vocab.v=null;setBackend(data.backend)}
+/* Journey backend (comments, Adam's notes, stats): a Google Apps Script in Adam's account, address comes with the index. Without it all of this stays hidden. */
+let BACK="",FEED={comments:{},notes:{}};
+function setBackend(u){BACK=u||"";store.set("gtj-backend",BACK);if(BACK)loadFeed()}
+async function loadFeed(){try{const r=await fetch(BACK+"?action=feed");FEED=await r.json();FEED.comments=FEED.comments||{};FEED.notes=FEED.notes||{};applyNotes()}catch(e){}}
+function applyNotes(){let ch=false;for(const c of INDEX.clips){const n=FEED.notes[c.id];if(n&&(n.title!==c.title||n.desc!==c.desc)){c.title=n.title||c.title;c.desc=n.desc||c.desc;ch=true}}
+  if(ch){vocab.v=null;prep();buildDays()}try{render()}catch(e){}}
+const postBack=d=>fetch(BACK,{method:"POST",mode:"no-cors",body:JSON.stringify(d)}).catch(()=>{});
+const noteLine=c=>{const n=FEED.notes[c.id],k=(FEED.comments[c.id]||[]).length;return (n&&n.desc?`<em class="note">${esc(n.desc.slice(0,90))}</em>`:"")+(k?`<span class="cm">💬 ${k}</span>`:"")};
 async function loadIndex(){
   const last=store.get("gtx-last",null),hit=last&&await cget(last.key);
   if(hit){   // show the saved copy now; swap in a newer one if Drive has it
@@ -395,6 +406,7 @@ function run(){
   for(const c of CL){
     if(S.cell&&c.o.cell!==S.cell)continue;
     if(S.picks&&c.pick<2)continue;
+    if(S.person&&!(c.pp||[]).includes(S.person))continue;
     if(S.hearts&&!HEART[c.id])continue;
     let ok=true,sc=0;
     for(const x of f){
@@ -434,11 +446,11 @@ function sortRes(r){
   else if(k==="long")r.sort((a,b)=>b[1].dur-a[1].dur);else r.sort((a,b)=>b[0]-a[0]||(a[1].t<b[1].t?1:-1));
   return r;
 }
-const hasFilter=()=>S.q||S.country||S.place||S.range||S.cell||S.picks||S.hearts;
+const hasFilter=()=>S.person||S.q||S.country||S.place||S.range||S.cell||S.picks||S.hearts;
 function cardHTML(c,i,f){
   const sn=f?snippet(c,f):null;c._sn=sn;
   const hh=HEART[c.id];
-  return `<div class="card" role="button" tabindex="0" data-i="${i}" data-id="${c.id}"><div class="th" data-id="${c.id}"><span class="du">${fmtDur(c.dur)}</span>${c.pick>=2?'<span class="star">★ Adam\'s pick</span>':""}<span class="ic"><button type="button" data-act="heart" class="${hh?"on":""}" aria-label="${hh?"Remove heart":"Heart this clip"}" title="Heart">${hh?"♥":"♡"}</button><button type="button" data-act="share" aria-label="Copy a link to this clip" title="Copy link">⤴</button>${OWNER?'<button type="button" data-act="hide" aria-label="Hide from friends" title="Hide from friends">🚫</button>':""}</span></div><div class="tx"><b>${esc(c.o.label)}</b><span>${fmtDate(c.t)} · ${c.t.slice(11,16)} · Day ${c.day??"–"}</span>${sn?`<em class="snip">“${sn.html}” <small>${fmtDur(sn.a)}</small></em>`:""}</div></div>`;
+  return `<div class="card" role="button" tabindex="0" data-i="${i}" data-id="${c.id}"><div class="th" data-id="${c.id}"><span class="du">${fmtDur(c.dur)}</span>${c.pick>=2?'<span class="star">★ Adam\'s pick</span>':""}<span class="ic"><button type="button" data-act="heart" class="${hh?"on":""}" aria-label="${hh?"Remove heart":"Heart this clip"}" title="Heart">${hh?"♥":"♡"}</button><button type="button" data-act="share" aria-label="Copy a link to this clip" title="Copy link">⤴</button>${OWNER&&BACK?'<button type="button" data-act="note" aria-label="Edit my note" title="Add a title or description">✎</button>':""}${OWNER?'<button type="button" data-act="hide" aria-label="Hide from friends" title="Hide from friends">🚫</button>':""}</span></div><div class="tx"><b>${esc(c.o.label)}</b><span>${fmtDate(c.t)} · ${c.t.slice(11,16)} · Day ${c.day??"–"}</span>${noteLine(c)}${sn?`<em class="snip">“${sn.html}” <small>${fmtDur(sn.a)}</small></em>`:""}</div></div>`;
 }
 function render(){
   const out=run();LAST=out;LASTF=out.f;RES=sortRes(out.res).map(x=>x[1]);MAPDIRTY=GDIRTY=true;CELLS=null;
@@ -476,6 +488,8 @@ function facets(){
   CL.forEach(c=>{if(!S.country||c.country===S.country)pt[c.o.label]=(pt[c.o.label]||0)+1});
   if(S.place&&!(S.place in pt))pt[S.place]=0;
   const cities=Object.keys(pt).sort((a,b)=>(pc[b]||0)-(pc[a]||0)||pt[b]-pt[a]);
+  const pp={};CL.forEach(c=>(c.pp||[]).forEach(n=>pp[n]=(pp[n]||0)+1));const names=Object.keys(pp).sort((a,b)=>pp[b]-pp[a]),pe=$("ppbar");
+  pe.hidden=!names.length;pe.innerHTML=names.length?`<span class="plab">People</span><button class="chip" data-w="" aria-pressed="${!S.person}">Everyone</button>`+names.map(n=>`<button class="chip" data-w="${esc(n)}" aria-pressed="${S.person===n}">👤 ${esc(n)}<small>${pp[n]}</small></button>`).join(""):"";
   const pb=$("pbar");pb.hidden=cities.length<2;
   const LIM=12,withHits=cities.filter(k=>pc[k]||S.place===k),open=S.allCities||cities.length<=LIM+2;
   let shown=open?cities:withHits.slice(0,LIM);if(S.place&&!shown.includes(S.place))shown=[S.place,...shown];
@@ -489,6 +503,7 @@ const pickCountry=e=>{const b=e.target.closest(".chip");if(!b)return;S.country=S
   if(S.place&&S.country&&!CL.some(c=>c.country===S.country&&c.o.label===S.place)){S.place="";G.sel=null}
   if(S.country){const c=CH.find(x=>x.country===S.country);if(c)flyTo(c.lon,c.lat)}render()};
 $("countries").onclick=pickCountry;$("cbar").onclick=pickCountry;
+$("ppbar").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;S.person=S.person===b.dataset.w?"":b.dataset.w;S.shown=60;render()};
 $("pbar").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;if(b.dataset.more){S.allCities=!S.allCities;facets();return}S.place=S.place===b.dataset.p?"":b.dataset.p;G.sel=S.place||null;S.shown=60;
   if(S.place){const c=CH.find(x=>x.label===S.place);if(c)flyTo(c.lon,c.lat)}render()};
 /* flag emoji from the two-letter country code in the data; the globe emoji for clips with no country */
@@ -588,6 +603,7 @@ function cardAct(e){
   const b=e.target.closest("[data-act]");if(!b)return false;e.stopPropagation();
   const id=b.closest(".card").dataset.id,c=INDEX.byId.get(id);
   if(b.dataset.act==="heart"){if(HEART[id])delete HEART[id];else HEART[id]={m:0};store.set("gtx-hearts",HEART);document.querySelectorAll(`.card[data-id="${id}"] [data-act="heart"]`).forEach(x=>{x.classList.toggle("on",!!HEART[id]);x.textContent=HEART[id]?"♥":"♡"});pickCount();if(S.hearts)render()}
+  else if(b.dataset.act==="note"){editNote(id)}
   else if(b.dataset.act==="hide"){HIDE.add(id);store.set("gtx-hide",[...HIDE]);vocab.v=null;prep();buildDays();render();ownerBar();toast("Hidden. It stays in this browser until you run the command.")}
   else if(b.dataset.act==="share"){const sn=c._sn?`&t=${c._sn.a}`:"";const url=location.origin+location.pathname+`#clip=${id}${sn}`;
     (navigator.clipboard?navigator.clipboard.writeText(url):Promise.reject()).then(()=>toast("Link copied"),()=>prompt("Copy this link",url))}
@@ -598,13 +614,37 @@ $("grid").addEventListener("click",e=>{
   const d=e.target.closest(".dayh");if(d){S.range=[d.dataset.d,d.dataset.d];S.view="grid";render();const c=CH.find(x=>x.a<=d.dataset.d&&x.b>=d.dataset.d);if(c)flyTo(c.lon,c.lat);return}
   const b=e.target.closest(".card");if(!b)return;const i=+b.dataset.i;openList(RES,i,RES[i]._sn?.a)});
 $("grid").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.classList.contains("card"))e.target.click()});
+const okey=()=>{let k=store.get("gtx-okey","");if(!k){k=prompt("Your owner key (the OWNER_KEY from the Journey backend)")||"";if(k)store.set("gtx-okey",k)}return k};
+async function ownerGet(a,extra=""){const k=okey();if(!k)return null;const r=await (await fetch(`${BACK}?action=${a}&key=${encodeURIComponent(k)}${extra}`)).json();if(r.error){store.set("gtx-okey","");toast("That owner key was not accepted.");return null}return r}
+function dlg(html){let d=document.getElementById("od");if(!d){d=document.createElement("dialog");d.id="od";document.body.append(d)}d.innerHTML=html+`<p style="text-align:right;margin:8px 0 0"><button class="btn" id="odx">Close</button></p>`;d.querySelector("#odx").onclick=()=>d.close();d.showModal();return d}
+let inboxT=null;
+async function pollInbox(){clearInterval(inboxT);if(!OWNER||!BACK||!store.get("gtx-okey",""))return;
+  const go=async()=>{try{const r=await ownerGet("inbox","&since="+encodeURIComponent(store.get("gtx-seen","1970-01-01")));const n=r?.comments?.length||0,e=document.getElementById("inboxn");if(e)e.textContent=n?` (${n} new)`:""}catch(e){}};
+  go();inboxT=setInterval(go,60000)}
+async function openInbox(){const r=await ownerGet("inbox","&since="+encodeURIComponent(store.get("gtx-seen","1970-01-01")));if(!r)return;
+  const all=await ownerGet("inbox","&since=1970-01-01"),list=(all?.comments||[]).slice(-40).reverse(),seen=store.get("gtx-seen","1970-01-01");
+  const d=dlg(`<h3>Comments</h3>${list.length?list.map(c=>`<div class="cmt"><b>${esc(c.name)}</b> on <a href="#" data-clip="${esc(c.clip)}" data-t="${c.sec||0}">${esc(c.label||c.clip)}</a>${c.sec?` at ${fmtDur(c.sec)}`:""} ${c.ts>seen?"<b style='color:var(--accent)'>new</b>":""}<br>${esc(c.text)}<br><small>${esc(c.ts.slice(0,16).replace("T"," "))}</small> <button class="btn" data-del="${esc(c.id)}" style="padding:1px 8px;font-size:12px">Remove</button></div>`).join(""):"<p>No comments yet.</p>"}`);
+  store.set("gtx-seen",new Date().toISOString());const e=document.getElementById("inboxn");if(e)e.textContent="";
+  d.onclick=ev=>{const a=ev.target.closest("[data-clip]"),x=ev.target.closest("[data-del]");
+    if(a){ev.preventDefault();const c=INDEX.byId.get(a.dataset.clip);if(c)openList([c],0,Number(a.dataset.t)||0)}
+    if(x){postBack({action:"hide_comment",key:store.get("gtx-okey",""),id:x.dataset.del});x.closest(".cmt").remove();setTimeout(loadFeed,1500)}}}
+async function openStats(){const r=await ownerGet("stats");if(!r)return;
+  const tb=(h,rows)=>`<h4 style="margin:10px 0 4px">${h}</h4><table>${rows.map(x=>`<tr><td>${esc(x.label||x.k)}</td><td>${x.n}</td></tr>`).join("")||"<tr><td>Nothing yet</td><td></td></tr>"}</table>`;
+  dlg(`<h3>Who watches what</h3><p><b>${r.totals.views}</b> views · <b>${r.totals.viewers}</b> named viewers · <b>${r.totals.comments}</b> comments</p>${tb("Most watched clips",r.topClips)}${tb("Most watched places",r.topPlaces)}${tb("Most active viewers",r.topViewers)}${tb("Most commented",r.mostCommented)}${tb("Views per day (last 30 days)",r.perDay)}<h4 style="margin:10px 0 4px">Latest views</h4><table>${r.recent.map(x=>`<tr><td>${esc(x.name||"Someone")} watched ${esc(x.label)}</td><td>${esc(x.ts.slice(5,16).replace("T"," "))}</td></tr>`).join("")}</table>`)}
+function editNote(id){const c=INDEX.byId.get(id),n=FEED.notes[id]||{};
+  const t=prompt("Title for friends (empty keeps the automatic one)",n.title||c.title||"");if(t===null)return;
+  const d=prompt("Your description or note for this moment",n.desc||c.desc||"");if(d===null)return;
+  const k=okey();if(!k)return;postBack({action:"note",key:k,clip:id,title:t,desc:d});FEED.notes[id]={title:t,desc:d};applyNotes();toast("Saved. Everyone sees it on their next visit.")}
 function ownerBar(){
   if(!OWNER)return;let b=document.getElementById("ownerbar");if(!b){b=document.createElement("div");b.id="ownerbar";document.body.append(b)}
-  const n=HIDE.size;b.innerHTML=`<b>Owner mode</b><span>${n} clip${n===1?"":"s"} hidden</span><button class="btn" data-o="copy" ${n?"":"disabled"}>Copy hide command</button><button class="btn" data-o="undo" ${n?"":"disabled"}>Undo last</button><button class="btn" data-o="clear" ${n?"":"disabled"}>Show all again</button><button class="btn" data-o="exit">Exit</button>`;
+  const n=HIDE.size;b.innerHTML=`<b>Owner mode</b><span>${n} clip${n===1?"":"s"} hidden</span><button class="btn" data-o="copy" ${n?"":"disabled"}>Copy hide command</button><button class="btn" data-o="undo" ${n?"":"disabled"}>Undo last</button><button class="btn" data-o="clear" ${n?"":"disabled"}>Show all again</button>${BACK?`<button class="btn" data-o="inbox">🔔 Inbox<span id="inboxn"></span></button><button class="btn" data-o="stats">📊 Stats</button>`:""}<button class="btn" data-o="exit">Exit</button>`;
+  pollInbox();
   b.onclick=e=>{const k=e.target.dataset?.o;if(!k)return;
     if(k==="copy"){const cmd="python3 tools/hide_clips.py "+[...HIDE].join(" ");(navigator.clipboard?navigator.clipboard.writeText(cmd):Promise.reject()).then(()=>toast("Copied. Run it in the GoPro Travels Workspace folder."),()=>prompt("Copy this command",cmd))}
     else if(k==="undo"){const l=[...HIDE].pop();HIDE.delete(l);store.set("gtx-hide",[...HIDE]);vocab.v=null;prep();buildDays();render();ownerBar()}
     else if(k==="clear"){HIDE=new Set();store.set("gtx-hide",[]);vocab.v=null;prep();buildDays();render();ownerBar()}
+    else if(k==="inbox")openInbox();
+    else if(k==="stats")openStats();
     else if(k==="exit"){store.set("gtx-owner",false);location.search="";}}
 }
 $("rnd").onclick=()=>{   // a shuffled queue of whatever is showing, starting on a random clip
@@ -877,8 +917,10 @@ async function start(){
   render();ownerBar();requestAnimationFrame(frame);
   const id=h.get("clip");if(id&&INDEX.byId.has(id))openList([INDEX.byId.get(id)],0,Number(h.get("t"))||0);   // a shared link goes straight to the moment
 }
+try{navigator.serviceWorker?.register("../sw.js")}catch(e){}   // keeps the page and the saved library so it opens with no signal
 loadToken();
-if(token)start();else{$("welcome").hidden=false;$("signin").hidden=false;initGoogle()}
+if(token)start();
+else if(!navigator.onLine&&store.get("gtx-last",null))start();   // offline: show the saved copyelse{$("welcome").hidden=false;$("signin").hidden=false;initGoogle()}
 </script>
 </body>
 </html>
