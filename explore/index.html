@@ -259,8 +259,14 @@ const HKRE=/hong ?kong|kowloon|new territories|kwun tong|tsuen wan|sha tin|tsim 
 const inHK=(lat,lon)=>lat!=null&&lon!=null&&lat>22.13&&lat<22.57&&lon>113.82&&lon<114.45;
 const isHK=c=>c.cc==="HK"||HKRE.test([c.city,c.region,c.country,c.area].join(" "))||inHK(c.lat,c.lon);
 function makeHK(c){if(!isHK(c))return;c.country="Hong Kong";c.cc="HK";c.city="Hong Kong";if("area" in c)c.area="Hong Kong";else c.region="Hong Kong"}
+/* Place fixes: "Wushan" is just the Guangzhou district the geocoder picked; named trips get their own tag. */
+const PLACE_RULES=[{label:"Chinese village",test:c=>c.city==="Binzhou"&&c.t>="2026-04-13"&&c.t<"2026-04-18",tags:["village","binzhou","shandong","jinan","friend"]}];
+function fixPlace(c){
+  if(c.city==="Wushan")c.city="Guangzhou";
+  if(c.t)for(const r of PLACE_RULES)if(r.test(c)){c.city=r.label;c.tags=[...(c.tags||[]),...r.tags];break}
+}
 function prep(){
-  INDEX.clips.forEach(makeHK);(INDEX.stops||[]).forEach(makeHK);
+  INDEX.clips.forEach(c=>{fixPlace(c);makeHK(c)});(INDEX.stops||[]).forEach(s=>{if(s.city==="Wushan")s.city="Guangzhou";makeHK(s)});
   const per=new Map();for(const c of INDEX.clips){if(c.region&&c.city){if(!per.has(c.region))per.set(c.region,new Set());per.get(c.region).add(norm(c.city))}}
   METRO=new Set(["Bangkok","Ho Chi Minh City","Da Nang","Ha Noi","Tokyo","Chongqing Shi"].filter(r=>per.has(r)));
   CL=INDEX.clips.filter(c=>!c.pre).map(c=>{
@@ -282,6 +288,12 @@ function prep(){
   const raw=(INDEX.stops||[]).filter(s=>!s.before_trip).map(s=>({label:placeLabel(s.city,s.area),country:s.country,cc:s.cc,a:s.start.slice(0,10),b:s.end.slice(0,10),secs:s.seconds,n:s.clips}));
   CH=[];for(const s of raw){const p=CH[CH.length-1];if(p&&p.label===s.label&&p.cc===s.cc){p.b=s.b;p.secs+=s.secs;p.n+=s.n}else CH.push({...s})}
   for(const c of CH){const cs=byLabel(c.label,c.a,c.b);const med=k=>{const v=cs.map(x=>x[k]).sort((x,y)=>x-y);return v[v.length>>1]};c.lat=cs.length?med("lat"):null;c.lon=cs.length?med("lon"):null}
+  for(const r of PLACE_RULES){   // a tagged trip becomes its own stop on the route
+    const cs=CL.filter(c=>c.o.label===r.label&&c.lat!=null);if(!cs.length)continue;
+    const med=k=>{const v=cs.map(x=>x[k]).sort((x,y)=>x-y);return v[v.length>>1]},ds=cs.map(c=>c.o.date).sort();
+    CH.push({label:r.label,country:cs[0].country,cc:cs[0].cc,a:ds[0],b:ds.at(-1),secs:cs.reduce((t,c)=>t+c.dur,0),n:cs.length,lat:med("lat"),lon:med("lon")});
+  }
+  CH.sort((x,y)=>x.a<y.a?-1:x.a>y.a?1:0);
   CH=CH.filter(c=>c.lat!=null);
   const cs=[...new Set(CH.map(c=>c.country))];CH.forEach(c=>c.col=PALETTE[cs.indexOf(c.country)%PALETTE.length]);
   window.COUNTRIES=cs;
