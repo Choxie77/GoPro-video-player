@@ -127,7 +127,7 @@ kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 
 .cmts{display:grid;gap:8px;max-width:760px}.cmts h3{margin:0;font:700 15px var(--display)}
 .note-desc{margin:0;padding:10px 12px;background:var(--panel);border-left:3px solid var(--accent);border-radius:8px}
 .cmt{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px}.cmt small{color:var(--muted)}.cmt a{color:var(--accent);cursor:pointer}
-.cform{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.cform input[type=text]{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0}
+.cmt.reply{margin-left:22px;border-left:3px solid var(--accent)}.cmt [data-reply]{margin-left:8px;font-size:12px}#rto{flex-basis:100%}.cform{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.cform input[type=text]{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0}
 #ctext{flex:1;min-width:180px}
 .soundhint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;background:var(--accent);color:var(--bg);border:0;border-radius:999px;padding:14px 22px;min-height:52px;font:700 17px var(--body);box-shadow:0 4px 18px #0009;cursor:pointer}
 #snd[aria-pressed=false]{color:var(--muted)}
@@ -271,6 +271,7 @@ input,select,textarea{font-size:16px}  /* stops iPhone Safari zooming in when a 
           <h3>Comments <span class="muted" id="ccount"></span></h3>
           <div id="clist"></div>
           <form id="cform" class="cform">
+            <span id="rto" class="muted" hidden><span id="rtot"></span> <a id="rx" style="cursor:pointer">✕</a></span>
             <input type="text" id="ctext" placeholder="Write a comment about this moment…" maxlength="1000" aria-label="Comment">
             <label class="muted"><input type="checkbox" id="cat" checked> at <span id="catt">0:00</span></label>
             <button class="btn primary" type="submit">Post</button>
@@ -894,18 +895,23 @@ function paintComments() {
   const n = FEED.notes[id], list = FEED.comments[id] || [];
   $("cnote").hidden = !(n && (n.desc || n.title)); $("cnote").textContent = n ? [n.title, n.desc].filter(Boolean).join(" · ") : "";
   $("ccount").textContent = list.length ? `· ${list.length}` : "";
-  $("clist").innerHTML = list.map((c) => `<div class="cmt"><b>${esc(c.name)}</b>${c.sec ? ` <a data-sec="${c.sec}">at ${fmt(c.sec)}</a>` : ""}<br>${esc(c.text)}<br><small>${esc(String(c.ts).slice(0, 10))}</small></div>`).join("");
+  const ids = new Set(list.map((c) => c.id)), card = (c, sub) => `<div class="cmt${sub ? " reply" : ""}"><b>${esc(c.name)}</b>${c.sec ? ` <a data-sec="${c.sec}">at ${fmt(c.sec)}</a>` : ""}<br>${esc(c.text)}<br><small>${esc(String(c.ts).slice(0, 10))}</small> <a data-reply="${esc(c.id)}" data-who="${esc(c.name)}">Reply</a></div>`;
+  const byId = Object.fromEntries(list.map((c) => [c.id, c])), root = (c) => { let n = 0; while (c.parent && byId[c.parent] && n++ < 20) c = byId[c.parent]; return c.id; };
+  $("clist").innerHTML = list.filter((c) => !c.parent || !ids.has(c.parent)).map((c) => card(c, false) + list.filter((r) => r !== c && r.parent && root(r) === c.id).map((r) => card(r, true)).join("")).join("");
 }
-$("clist").onclick = (e) => { const a = e.target.closest("[data-sec]"); if (a) { va().currentTime = Number(a.dataset.sec); va().play().catch(() => {}); } };
+let replyTo = null; document.getElementById("rx").onclick = () => setReply(null);
+function setReply(r) { replyTo = r; $("rto").hidden = !r; $("rtot").textContent = r ? "Replying to " + r.who : ""; if (r) $("ctext").focus(); }
+$("clist").onclick = (e) => { const r = e.target.closest("[data-reply]"); if (r) return setReply({id: r.dataset.reply, who: r.dataset.who}); const a = e.target.closest("[data-sec]"); if (a) { va().currentTime = Number(a.dataset.sec); va().play().catch(() => {}); } };
 setInterval(() => { $("catt").textContent = fmt(va().currentTime || 0); }, 500);
 $("cform").onsubmit = (e) => {
   e.preventDefault();
   const it = items[idx], id = cidOf(it), text = $("ctext").value.trim(), name = ME.name || "You";
   if (!text || !id) return;
   const sec = $("cat").checked ? Math.floor(va().currentTime || 0) : 0;
-  postBack({action: "comment", clip: id, label: it.title, sec, text});
-  (FEED.comments[id] = FEED.comments[id] || []).push({id: "x" + Date.now(), ts: new Date().toISOString(), sec, name, text});
-  $("ctext").value = ""; paintComments(); toast("Posted. Adam gets a message.");
+  const parent = replyTo ? replyTo.id : "";
+  postBack({action: "comment", clip: id, label: it.title, sec, text, parent});
+  (FEED.comments[id] = FEED.comments[id] || []).push({id: "x" + Date.now(), ts: new Date().toISOString(), sec, name, text, parent});
+  $("ctext").value = ""; const was = replyTo; setReply(null); paintComments(); toast(was ? `Posted. ${was.who} gets an email.` : "Posted. Adam gets a message.");
 };
 // count a view once per clip and visit, after it has really played for 3 seconds
 vids.forEach((v) => v.addEventListener("timeupdate", () => {
