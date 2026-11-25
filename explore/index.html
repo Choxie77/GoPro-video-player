@@ -263,12 +263,14 @@ function makeHK(c){if(!isHK(c))return;c.country="Hong Kong";c.cc="HK";c.city="Ho
 /* Place fixes: "Wushan" is just the Guangzhou district the geocoder picked; named trips get their own tag. */
 const PLACE_RULES=[
   {label:"Chinese village",test:c=>c.city==="Binzhou"&&c.t>="2026-04-13"&&c.t<"2026-04-18",tags:["village","binzhou","shandong","jinan","friend"]},
-  // Adam's own timeline: the camera had no GPS fix after Da Nang, so those clips inherited Da Nang. He left Da Nang on 18 Mar 2026 and cycled Hanoi to Haiphong on 24 Mar.
+  // Adam's own timeline: the camera had no GPS fix after Da Nang, so those clips inherited Da Nang. He was back in Hoi An 15-17 Mar and in Hanoi from 18 Mar 2026 and cycled Hanoi to Haiphong on 24 Mar.
   {label:"Hanoi to Haiphong ride",region:"Hanoi to Haiphong ride",test:c=>c.country==="Viet Nam"&&c.t.slice(0,10)==="2026-03-24",lat:20.93,lon:106.1,tags:["bike","bicycle","cycling","haiphong","hai phong","hanoi","ride"]},
   // Hong Kong and Shenzhen, dated from what Adam says in the clips (first HK clip 6 Jun 16:02, "leaving Hong Kong" 8 Jun, Shenzhen until ~14 Jun); the camera still said Guangzhou
   {label:"Hong Kong",country:"Hong Kong",cc:"HK",region:"Hong Kong",test:c=>c.t>="2026-06-06T14:00"&&c.t<"2026-06-08T13:00",lat:22.3,lon:114.17,tags:["hk","hongkong"]},
   {label:"Shenzhen",country:"China",cc:"CN",region:"Shenzhen",test:c=>c.t>="2026-06-08T13:00"&&c.t<"2026-06-15",lat:22.54,lon:114.06,tags:["guangdong"]},
-  {label:"Hanoi",city:"Hanoi",region:"Ha Noi",chapter:false,test:c=>c.country==="Viet Nam"&&c.city==="Da Nang"&&c.t>="2026-03-19"&&c.t<"2026-03-27",lat:null,lon:null}
+  // second Hoi An visit (15-17 Mar, with his sister), then Hanoi from 18 Mar
+  {label:"Hoi An",city:"Hoi An",region:"Quang Nam",chapter:false,test:c=>c.country==="Viet Nam"&&c.city==="Da Nang"&&c.t>="2026-03-15"&&c.t<"2026-03-18",lat:15.88,lon:108.34},
+  {label:"Hanoi",city:"Hanoi",region:"Ha Noi",chapter:false,test:c=>c.country==="Viet Nam"&&c.city==="Da Nang"&&c.t>="2026-03-18"&&c.t<"2026-03-27",lat:null,lon:null}
 ];
 function fixPlace(c){
   if(c.city==="Wushan")c.city="Guangzhou";
@@ -295,10 +297,10 @@ function prep(){
   // chapters: consecutive stops in the same place, with a position from the clips recorded there
   const byLabel=(l,a,b)=>CL.filter(c=>c.o.label===l&&c.o.date>=a&&c.o.date<=b&&c.lat!=null);
   const raw=(INDEX.stops||[]).filter(s=>!s.before_trip).map(s=>({label:placeLabel(s.city,s.area),country:s.country,cc:s.cc,a:s.start.slice(0,10),b:s.end.slice(0,10),secs:s.seconds,n:s.clips}));
-  for(let i=0;i<raw.length;i++){const st=raw[i];   // the Da Nang stop really ended on 18 Mar; the rest of it was Hanoi
-    if(st.label==="Da Nang"&&st.country==="Viet Nam"&&st.a<="2026-03-18"&&st.b>"2026-03-18"){
-      const hs=CL.filter(c=>c.o.label==="Hanoi"&&c.o.date>"2026-03-18"&&c.o.date<=st.b);
-      raw.splice(i+1,0,{label:"Hanoi",country:st.country,cc:st.cc,a:"2026-03-19",b:st.b,secs:hs.reduce((t,c)=>t+c.dur,0),n:hs.length});st.b="2026-03-18";break}}
+  for(let i=0;i<raw.length;i++){const st=raw[i];   // the long Da Nang stop was really Da Nang, a second Hoi An visit (15-17 Mar), then Hanoi
+    if(st.label==="Da Nang"&&st.country==="Viet Nam"&&st.a<="2026-03-14"&&st.b>="2026-03-18"){
+      const part=(l,a,b)=>{const x=CL.filter(c=>c.o.label===l&&c.o.date>=a&&c.o.date<=b);return{label:l,country:st.country,cc:st.cc,a,b,secs:x.reduce((t,c)=>t+c.dur,0),n:x.length}};
+      raw.splice(i+1,0,part("Hoi An","2026-03-15","2026-03-17"),part("Hanoi","2026-03-18",st.b));st.b="2026-03-14";break}}
   CH=[];for(const s of raw){const p=CH[CH.length-1];if(p&&p.label===s.label&&p.cc===s.cc){p.b=s.b;p.secs+=s.secs;p.n+=s.n}else CH.push({...s})}
   for(const c of CH){const cs=byLabel(c.label,c.a,c.b);const med=k=>{const v=cs.map(x=>x[k]).sort((x,y)=>x-y);return v[v.length>>1]};c.lat=cs.length?med("lat"):null;c.lon=cs.length?med("lon"):null}
   for(const r of PLACE_RULES){   // a tagged trip becomes its own stop on the route
