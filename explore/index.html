@@ -257,14 +257,22 @@ async function loadIndex(){
 function keepCache(){const l=store.get("gtx-last",null);if(l)cprune(new Set([l.key,...l.sheets.map(s=>"img:"+s[1])]))}
 /* Hong Kong is its own place on the trip: anything the geocoder filed under China (or a Hong Kong district) there becomes a country of its own. */
 const HKRE=/hong ?kong|kowloon|new territories|kwun tong|tsuen wan|sha tin|tsim sha tsui|mong kok|wan chai|victoria harbour|lantau|tuen mun|yuen long|sai kung|central and western/i;
-const inHK=(lat,lon)=>lat!=null&&lon!=null&&lat>22.13&&lat<22.57&&lon>113.82&&lon<114.45;
+const inHK=(lat,lon)=>lat!=null&&lon!=null&&lat>22.13&&lat<22.44&&lon>113.82&&lon<114.45;
 const isHK=c=>c.cc==="HK"||HKRE.test([c.city,c.region,c.country,c.area].join(" "))||inHK(c.lat,c.lon);
 function makeHK(c){if(!isHK(c))return;c.country="Hong Kong";c.cc="HK";c.city="Hong Kong";if("area" in c)c.area="Hong Kong";else c.region="Hong Kong"}
 /* Place fixes: "Wushan" is just the Guangzhou district the geocoder picked; named trips get their own tag. */
-const PLACE_RULES=[{label:"Chinese village",test:c=>c.city==="Binzhou"&&c.t>="2026-04-13"&&c.t<"2026-04-18",tags:["village","binzhou","shandong","jinan","friend"]}];
+const PLACE_RULES=[
+  {label:"Chinese village",test:c=>c.city==="Binzhou"&&c.t>="2026-04-13"&&c.t<"2026-04-18",tags:["village","binzhou","shandong","jinan","friend"]},
+  // Adam's own timeline: the camera had no GPS fix after Da Nang, so those clips inherited Da Nang. He left Da Nang on 18 Mar 2026 and cycled Hanoi to Haiphong on 24 Mar.
+  {label:"Hanoi to Haiphong ride",region:"Hanoi to Haiphong ride",test:c=>c.country==="Viet Nam"&&c.t.slice(0,10)==="2026-03-24",lat:20.93,lon:106.1,tags:["bike","bicycle","cycling","haiphong","hai phong","hanoi","ride"]},
+  // Hong Kong and Shenzhen, dated from what Adam says in the clips (first HK clip 6 Jun 16:02, "leaving Hong Kong" 8 Jun, Shenzhen until ~14 Jun); the camera still said Guangzhou
+  {label:"Hong Kong",country:"Hong Kong",cc:"HK",region:"Hong Kong",test:c=>c.t>="2026-06-06T14:00"&&c.t<"2026-06-08T13:00",lat:22.3,lon:114.17,tags:["hk","hongkong"]},
+  {label:"Shenzhen",country:"China",cc:"CN",region:"Shenzhen",test:c=>c.t>="2026-06-08T13:00"&&c.t<"2026-06-15",lat:22.54,lon:114.06,tags:["guangdong"]},
+  {label:"Hanoi",city:"Hanoi",region:"Ha Noi",chapter:false,test:c=>c.country==="Viet Nam"&&c.city==="Da Nang"&&c.t>="2026-03-19"&&c.t<"2026-03-27",lat:null,lon:null}
+];
 function fixPlace(c){
   if(c.city==="Wushan")c.city="Guangzhou";
-  if(c.t)for(const r of PLACE_RULES)if(r.test(c)){c.city=r.label;c.tags=[...(c.tags||[]),...r.tags];break}
+  if(c.t)for(const r of PLACE_RULES)if(r.test(c)){c.city=r.city||r.label;if(r.region)c.region=r.region;if(r.country){c.country=r.country;c.cc=r.cc}if("lat" in r){c.lat=r.lat;c.lon=r.lon;if(r.lat==null)delete c.lat,delete c.lon}if(r.tags)c.tags=[...(c.tags||[]),...r.tags];break}
 }
 function prep(){
   INDEX.clips.forEach(c=>{fixPlace(c);makeHK(c)});(INDEX.stops||[]).forEach(s=>{if(s.city==="Wushan")s.city="Guangzhou";makeHK(s)});
@@ -287,13 +295,24 @@ function prep(){
   // chapters: consecutive stops in the same place, with a position from the clips recorded there
   const byLabel=(l,a,b)=>CL.filter(c=>c.o.label===l&&c.o.date>=a&&c.o.date<=b&&c.lat!=null);
   const raw=(INDEX.stops||[]).filter(s=>!s.before_trip).map(s=>({label:placeLabel(s.city,s.area),country:s.country,cc:s.cc,a:s.start.slice(0,10),b:s.end.slice(0,10),secs:s.seconds,n:s.clips}));
+  for(let i=0;i<raw.length;i++){const st=raw[i];   // the Da Nang stop really ended on 18 Mar; the rest of it was Hanoi
+    if(st.label==="Da Nang"&&st.country==="Viet Nam"&&st.a<="2026-03-18"&&st.b>"2026-03-18"){
+      const hs=CL.filter(c=>c.o.label==="Hanoi"&&c.o.date>"2026-03-18"&&c.o.date<=st.b);
+      raw.splice(i+1,0,{label:"Hanoi",country:st.country,cc:st.cc,a:"2026-03-19",b:st.b,secs:hs.reduce((t,c)=>t+c.dur,0),n:hs.length});st.b="2026-03-18";break}}
   CH=[];for(const s of raw){const p=CH[CH.length-1];if(p&&p.label===s.label&&p.cc===s.cc){p.b=s.b;p.secs+=s.secs;p.n+=s.n}else CH.push({...s})}
   for(const c of CH){const cs=byLabel(c.label,c.a,c.b);const med=k=>{const v=cs.map(x=>x[k]).sort((x,y)=>x-y);return v[v.length>>1]};c.lat=cs.length?med("lat"):null;c.lon=cs.length?med("lon"):null}
   for(const r of PLACE_RULES){   // a tagged trip becomes its own stop on the route
-    const cs=CL.filter(c=>c.o.label===r.label&&c.lat!=null);if(!cs.length)continue;
-    const med=k=>{const v=cs.map(x=>x[k]).sort((x,y)=>x-y);return v[v.length>>1]},ds=cs.map(c=>c.o.date).sort();
-    CH.push({label:r.label,country:cs[0].country,cc:cs[0].cc,a:ds[0],b:ds.at(-1),secs:cs.reduce((t,c)=>t+c.dur,0),n:cs.length,lat:med("lat"),lon:med("lon")});
+    if(r.chapter===false)continue;const all=CL.filter(c=>c.o.label===r.label),cs=all.filter(c=>c.lat!=null);if(!cs.length)continue;
+    const med=k=>{const v=cs.map(x=>x[k]).sort((x,y)=>x-y);return v[v.length>>1]},ds=all.map(c=>c.o.date).sort();
+    CH.push({label:r.label,country:all[0].country,cc:all[0].cc,a:ds[0],b:ds.at(-1),secs:all.reduce((t,c)=>t+c.dur,0),n:all.length,lat:med("lat"),lon:med("lon")});
   }
+  const dayAdd=(d,n)=>new Date(Date.parse(d)+n*864e5).toISOString().slice(0,10);
+  for(const r of CH.filter(c=>PLACE_RULES.some(q=>q.label===c.label&&q.chapter!==false)))   // a rule's stop cuts the longer stop it happened inside
+    for(const c of CH.slice())if(c!==r&&c.a<=r.a&&c.b>=r.a&&!PLACE_RULES.some(q=>q.label===c.label&&q.chapter!==false)){
+      if(c.b>r.b)CH.push({...c,a:dayAdd(r.b,1)});
+      c.b=dayAdd(r.a,-1);if(c.b<c.a)c.a=c.b=r.a}
+  const isR=c=>PLACE_RULES.some(q=>q.label===c.label&&q.chapter!==false);
+  for(let k=0;k<4;k++)for(const c of CH)if(!isR(c))for(const r of CH)if(isR(r)&&r.a<=c.a&&c.a<=r.b&&c.b>r.b)c.a=dayAdd(r.b,1);   // a tail begins after the stops cut out of it
   CH.sort((x,y)=>x.a<y.a?-1:x.a>y.a?1:0);
   CH=CH.filter(c=>c.lat!=null);
   const cs=[...new Set(CH.map(c=>c.country))];CH.forEach(c=>c.col=PALETTE[cs.indexOf(c.country)%PALETTE.length]);
@@ -440,6 +459,7 @@ function facets(){
   // every country and city stays in the list so chips never vanish; the number shows what the current search leaves in it
   const r=LAST.anyCountry,cnt={};r.forEach(c=>cnt[c.country]=(cnt[c.country]||0)+1);
   const tot={};CL.forEach(c=>tot[c.country]=(tot[c.country]||0)+1);
+  if(!tot["Hong Kong"])tot["Hong Kong"]=0;   // listed even before any clips are filed there
   const list=Object.keys(tot).sort((a,b)=>tot[b]-tot[a]).map(k=>[k,cnt[k]||0]);
   const chip=([k,n])=>`<button class="chip${n||S.country===k?"":" zero"}" data-c="${esc(k)}" aria-pressed="${S.country===k}"><span class="flag" aria-hidden="true">${flag(k)}</span>${esc(COUNTRY_NAME[k]||k)}<small>${n}</small></button>`;
   $("countries").innerHTML=list.map(chip).join("");
@@ -464,7 +484,7 @@ $("countries").onclick=pickCountry;$("cbar").onclick=pickCountry;
 $("pbar").onclick=e=>{const b=e.target.closest(".chip");if(!b)return;if(b.dataset.more){S.allCities=!S.allCities;facets();return}S.place=S.place===b.dataset.p?"":b.dataset.p;G.sel=S.place||null;S.shown=60;
   if(S.place){const c=CH.find(x=>x.label===S.place);if(c)flyTo(c.lon,c.lat)}render()};
 /* flag emoji from the two-letter country code in the data; the globe emoji for clips with no country */
-const CC={};
+const CC={"Hong Kong":"HK"};
 const flag=name=>{const cc=CC[name];return cc&&/^[A-Za-z]{2}$/.test(cc)?String.fromCodePoint(...[...cc.toUpperCase()].map(ch=>127397+ch.charCodeAt(0))):"🌍"};
 
 /* ---------- calendar: pick the days that were good ---------- */
