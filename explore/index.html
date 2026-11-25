@@ -553,7 +553,7 @@ document.addEventListener("pointermove",e=>{if(e.pointerType==="touch")return;co
 
 /* ---------- opening clips in the player, hearts, links ---------- */
 function openList(clips,i,startSecs){
-  const list=clips.slice(Math.max(0,i),Math.max(0,i)+80).map((c,k)=>[c.drive,c.pv||"",`${c.o.label} · ${fmtDate(c.t)}`,k===0&&startSecs?Math.max(0,startSecs-2):0,c.hd||""].map(x=>encodeURIComponent(x??"").replace(/~/g,"%7E")).join("~")).join("|");
+  const list=clips.slice(Math.max(0,i),Math.max(0,i)+80).map((c,k)=>[c.drive,c.pv||"",`${c.o.label} · ${fmtDate(c.t)}`,k===0&&startSecs?Math.max(0,startSecs-2):0,c.hd||"","","","","",c.id].map(x=>encodeURIComponent(x??"").replace(/~/g,"%7E")).join("~")).join("|");
   location.href=`${TEST_API?"../player/":"../"}index.html${TEST_API?location.search:""}#q=light&i=0&list=${encodeURIComponent(list)}`;
 }
 function cardAct(e){

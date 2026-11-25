@@ -5,13 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>GoPro Travels Player</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 512 512%27%3E%3Crect width=%27512%27 height=%27512%27 rx=%27110%27 fill=%27%230e0e0c%27/%3E%3Ccircle cx=%27256%27 cy=%27256%27 r=%27150%27 fill=%27%2312151a%27 stroke=%27%23ff8a4f%27 stroke-width=%2714%27/%3E%3Cpath d=%27M130 310c60-90 120-30 180-110 30-40 50-30 72-8%27 fill=%27none%27 stroke=%27%23ff8a4f%27 stroke-width=%2716%27 stroke-linecap=%27round%27/%3E%3Ccircle cx=%27130%27 cy=%27310%27 r=%2718%27 fill=%27%23ff8a4f%27/%3E%3Ccircle cx=%27382%27 cy=%27192%27 r=%2718%27 fill=%27%23f1eee6%27/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Public+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* A screening room: picture first, one quiet control bar, the library a click away. Deliberately dark only. */
 :root {
-  --bg: #0b1014; --panel: #141c23; --panel2: #1a242d; --ink: #e6edf2; --muted: #8fa0ad; --line: #24313b;
-  --accent: #4cc3cb; --accent-soft: #123a3e; --warn: #f0b45a; --bad: #f08a83;
+  --bg: #0e0e0c; --panel: #18170f; --panel2: #201e14; --ink: #f1eee6; --muted: #a29d90; --line: #2c2a22;
+  --accent: #ff8a4f; --accent-soft: #3d2415; --warn: #f0b45a; --bad: #f08a83;
   --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --body: "Public Sans", "Helvetica Neue", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -105,6 +106,22 @@ kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 
 .tile .cap { position: absolute; left: 8px; bottom: 8px; right: 8px; display: flex; gap: 6px; align-items: center; justify-content: space-between; }
 .tile .cap span { background: rgba(0,0,0,.7); color: #fff; font-size: 12px; padding: 3px 7px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile .cap .snd { color: var(--accent); font-weight: 700; }
+.cardact { position: absolute; right: 6px; top: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+.card:hover .cardact, .card:focus-within .cardact, .card:focus .cardact { opacity: 1; }
+@media (hover: none) { .cardact { opacity: 1; } }
+.cardact span { width: 28px; height: 28px; border-radius: 6px; background: rgba(0,0,0,.7); color: #fff; display: grid; place-items: center; font-size: 15px; line-height: 1; }
+.cardact span:hover { background: var(--accent); color: var(--bg); }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--accent); color: var(--bg); font-weight: 600; padding: 9px 16px; border-radius: 10px; z-index: 20; }
+.dlmenu { position: relative; display: inline-block; }
+.dlmenu .pop { position: absolute; bottom: calc(100% + 6px); left: 0; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 4px; display: grid; min-width: 210px; z-index: 6; }
+.dlmenu .pop button { border: 0; background: transparent; text-align: left; padding: 8px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.dlmenu .pop button:hover { background: var(--accent-soft); }
+.dlmenu .pop button:disabled { opacity: .35; cursor: default; }
+.sendp { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 10px; }
+.sendp .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sendp input[type=text] { width: 76px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; text-align: center; font-family: var(--mono); }
+.sendp .msg { font-size: 13px; min-height: 1.4em; }
+.sendp .msg.bad { color: var(--bad); }
 .mbar input[type=range] { flex: 1 1 260px; accent-color: var(--accent); min-width: 0; }
 </style>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -112,6 +129,7 @@ kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 
 <body>
 <div class="wrap">
   <header>
+    <a class="btn" id="toexplore" href="explore/" title="Back to search and the globe">← Explore</a>
     <h1>GoPro Travels Player</h1>
     <nav class="tabs" aria-label="Views">
       <button data-v="lib">Library</button>
@@ -173,10 +191,28 @@ kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-radius: 
           <button class="btn" id="next" title="Next clip (N)">⏭</button>
           <select class="btn" id="speed" aria-label="Speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option></select>
           <span class="grow"></span>
+          <button class="btn" id="share" title="Copy a link to this clip (S)">⤴ Share</button>
+          <button class="btn" id="send" title="Cut a section, then copy or save it as a small file to send (C)" aria-expanded="false">✂ Send clip</button>
+          <span class="dlmenu"><button class="btn" id="dl" title="Save this clip to your device (D)" aria-haspopup="true">⬇ Download</button><div class="pop" id="dlpop" hidden></div></span>
           <label class="toggle"><input type="checkbox" id="auto" checked> Play next automatically</label>
         </div>
+        <div class="sendp" id="sendp" hidden>
+          <div class="row"><b>Send a clip as a file</b><span class="muted" style="font-size:13px">cut a section, then paste it into WhatsApp, iMessage or Mail</span></div>
+          <div class="row">
+            <label class="muted">From <input type="text" id="s-a" aria-label="Start time" value="0:00"></label><button class="btn" id="s-a-now" title="Use the current position">now</button>
+            <label class="muted">to <input type="text" id="s-b" aria-label="End time" value="0:30"></label><button class="btn" id="s-b-now" title="Use the current position">now</button>
+            <button class="btn" id="s-all" title="The whole clip">whole clip</button>
+            <select class="btn" id="s-size" aria-label="Size"><option value="small">Small · 540p</option><option value="normal" selected>Normal · 720p</option><option value="hd">Sharp · 1080p</option></select>
+          </div>
+          <div class="row">
+            <button class="btn primary" id="s-copy" title="Puts the file on your clipboard: just paste it into the chat">⧉ Copy to clipboard</button>
+            <button class="btn" id="s-save" title="Saves it in Movies › Clips to send">Save</button>
+            <button class="btn" id="s-both">Copy + save</button>
+          </div>
+          <p class="msg muted" id="s-msg" role="status"></p>
+        </div>
         <div style="display:grid;gap:4px"><p class="title" id="title"></p><p class="info muted mono" id="info"></p></div>
-        <p class="keys muted"><kbd>K</kbd>/<kbd>Space</kbd> play · <kbd>J</kbd> <kbd>L</kbd> ±5 s · <kbd>←</kbd> <kbd>→</kbd> ±1 s · <kbd>,</kbd> <kbd>.</kbd> one frame · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Light / HD / Full · <kbd>P</kbd> <kbd>N</kbd> previous / next · <kbd>F</kbd> full screen</p>
+        <p class="keys muted"><kbd>K</kbd>/<kbd>Space</kbd> play · <kbd>J</kbd> <kbd>L</kbd> ±5 s · <kbd>←</kbd> <kbd>→</kbd> ±1 s · <kbd>,</kbd> <kbd>.</kbd> one frame · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> Light / HD / Full · <kbd>P</kbd> <kbd>N</kbd> previous / next · <kbd>S</kbd> share · <kbd>D</kbd> download · <kbd>C</kbd> send clip · <kbd>F</kbd> full screen</p>
       </div>
       <aside id="queue" aria-label="Queue"></aside>
     </div>
@@ -355,7 +391,7 @@ function card(c) {
   const sel = selected.indexOf(c.id);
   const q = c.hd ? "HD" : c.pv ? "LIGHT" : "";
   return `<button class="card${sel >= 0 ? " sel" : ""}" data-id="${esc(c.id)}">
-    <div class="thumb" data-id="${esc(c.id)}"><span class="pick" data-pick="1" title="Select">${sel >= 0 ? sel + 1 : ""}</span>${q ? `<span class="q">${q}</span>` : ""}<span class="dur">${fmt(c.dur)}</span></div>
+    <div class="thumb" data-id="${esc(c.id)}"><span class="pick" data-pick="1" title="Select">${sel >= 0 ? sel + 1 : ""}</span><span class="cardact"><span data-share="1" role="button" aria-label="Copy a link to this clip" title="Copy link">⤴</span><span data-dl="1" role="button" aria-label="Download this clip" title="Download">⬇</span></span>${q ? `<span class="q">${q}</span>` : ""}<span class="dur">${fmt(c.dur)}</span></div>
     <div class="body"><span class="t">${esc(c.title || c.name)}</span><span class="m">${esc(c.t.slice(11, 16))} · ${esc(c.region || c.city || "Place unknown")}${(c.scenes || []).length ? " · " + esc(c.scenes[0]) : ""}</span></div></button>`;
 }
 async function renderLib(more) {
@@ -388,6 +424,8 @@ $("lib").addEventListener("click", (e) => {
   if (e.target.closest(".more")) return renderLib(true);
   const cardEl = e.target.closest(".card"); if (!cardEl) return;
   const id = cardEl.dataset.id;
+  if (e.target.closest("[data-share]")) { e.stopPropagation(); return shareClip(INDEX.byId.get(id)); }
+  if (e.target.closest("[data-dl]")) { e.stopPropagation(); return openDlMenu(e.target.closest("[data-dl]"), itemFromClip(INDEX.byId.get(id))); }
   if (e.target.closest("[data-pick]") || e.shiftKey || e.metaKey || e.ctrlKey) {
     const i = selected.indexOf(id); i >= 0 ? selected.splice(i, 1) : selected.push(id);
     refreshSelection(); return;
@@ -452,9 +490,9 @@ function pickQuality(it) {
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
   const list = (h.get("list") || "").split("|").filter(Boolean).map((s) => {
-    const [orig, light, title, start, hd, end, x, text, speed] = s.split("~").map((x) => decodeURIComponent(x || ""));
+    const [orig, light, title, start, hd, end, x, text, speed, cid] = s.split("~").map((x) => decodeURIComponent(x || ""));
     return {orig, light, hd: hd || "", title: title || orig, start: Number(start) || 0,
-      end: Number(end) || 0, x: x === "" || x == null ? 0.5 : Number(x), text: text || "", speed: Number(speed) || 0};
+      end: Number(end) || 0, x: x === "" || x == null ? 0.5 : Number(x), text: text || "", speed: Number(speed) || 0, cid: cid || ""};
   });
   editMode = h.get("edit") === "1";
   if (h.get("q")) quality = {light: "light", hd: "hd", full: "full"}[h.get("q")] || quality;
@@ -465,7 +503,7 @@ function openQueue(list, i) {
   show("play"); load(false);
 }
 function writeHash() {
-  const list = items.map((it) => [it.orig, it.light, it.title, it.start, it.hd, it.end || "", it.x ?? "", it.text || "", it.speed || ""].map((x) => encodeURIComponent(x ?? "").replace(/~/g, "%7E")).join("~")).join("|");
+  const list = items.map((it) => [it.orig, it.light, it.title, it.start, it.hd, it.end || "", it.x ?? "", it.text || "", it.speed || "", it.cid || it.clip?.id || ""].map((x) => encodeURIComponent(x ?? "").replace(/~/g, "%7E")).join("~")).join("|");
   history.replaceState(null, "", `#q=${quality}&i=${idx}${editMode ? "&edit=1" : ""}&list=${encodeURIComponent(list)}`);
 }
 function load(keepTime) {
@@ -522,7 +560,15 @@ vids.forEach((v) => {
     if (useProxy) { useProxy = false; load(true); return; }
     const it = items[idx];
     if (pickQuality(it) === "orig" && (it.hd || it.light)) { quality = it.hd ? "hd" : "light"; note("The original wouldn't play in this browser, so a copy is playing instead."); load(true); return; }
-    note("This clip couldn't be played. Check you're signed in with the Google account that owns the Drive.", true);
+    const key = pickQuality(it), fid = it[key];
+    note("This clip couldn't be played. Checking why…", true);
+    fetch(`${API}${fid}?fields=id&supportsAllDrives=true`, {headers: {Authorization: `Bearer ${token}`}}).then((r) => {
+      if (v !== va()) return;
+      if (r.status === 403 || r.status === 404) note("This Google account can't open this clip. Ask Adam to share the GoPro Travels folder (including its previews) with the Gmail address you signed in with, then reload.", true);
+      else if (r.status === 401) note("Your Google session ended. Sign in again to keep watching.", true, ["Sign in", signIn]);
+      else if (r.ok) note(`The clip is there but your browser couldn't play it (${key === "orig" ? "full original" : key}). Try the Light copy, or another browser such as Chrome.`, true);
+      else note(`This clip couldn't be played (Drive error ${r.status}). Reload and try again.`, true);
+    }).catch(() => { if (v === va()) note("This clip couldn't be played. Check your internet connection and reload.", true); });
   });
 });
 function clipFor(it) { return it.clip || INDEX?.byDrive.get(it.orig); }
@@ -541,6 +587,90 @@ $("next").onclick = () => { if (idx < items.length - 1) { idx++; load(false); } 
 $("back").onclick = () => step(-5); $("fwd").onclick = () => step(5);
 $("playbtn").onclick = () => (va().paused ? va().play() : va().pause());
 $("speed").onchange = () => { va().playbackRate = +$("speed").value; };
+
+/* ================= SHARE + DOWNLOAD ================= */
+let toastT;
+function toast(msg) {
+  let t = document.querySelector(".toast"); if (!t) { t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); document.body.appendChild(t); }
+  t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2600);
+}
+// The link opens this player straight on the clip. People still sign in with Google and need the folder shared with them,
+// but they never see or handle a Drive link.
+function shareUrl(c, secs) { return location.origin + location.pathname.replace(/[^/]*$/, "") + `explore/#clip=${encodeURIComponent(c.id)}${secs > 1 ? `&t=${Math.floor(secs)}` : ""}`; }
+async function shareClip(c, secs) {
+  if (!c) return toast("This clip can't be shared yet: it isn't in the library index.");
+  const url = shareUrl(c, secs), title = c.title || c.name;
+  if (navigator.share && matchMedia("(pointer: coarse)").matches) { try { await navigator.share({title, text: title, url}); return; } catch (e) { if (e.name === "AbortError") return; } }
+  try { await navigator.clipboard.writeText(url); toast("Link copied. Send it to anyone you've invited."); }
+  catch (e) { prompt("Copy this link", url); }
+}
+const dlName = (it, key) => `${(it.title || "clip").replace(/[^\w .()-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80)} (${{light: "Light", hd: "HD", orig: "Original"}[key]}).mp4`;
+async function downloadClip(it, key) {
+  const id = it[key]; if (!id) return;
+  const name = dlName(it, key);
+  if (useProxy) {  // the service worker streams it to disk with a download header, so big originals never sit in memory
+    const a = document.createElement("a");
+    a.href = `stream/${id}?t=${encodeURIComponent(token)}&dl=${encodeURIComponent(name)}${TEST_API ? `&api=${encodeURIComponent(TEST_API)}` : ""}`;
+    a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    return toast("Download started: check your Downloads");
+  }
+  toast("Preparing download…");
+  try { const b = await api(id, {alt: "media"}, true); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+  catch (e) { toast("Download failed. Sign in again and retry."); }
+}
+function closeDlMenu() { const p = $("dlpop"); p.hidden = true; document.body.appendChild(p); p.style.cssText = ""; $("dl").parentNode.appendChild(p); }
+function openDlMenu(anchor, it) {
+  const p = $("dlpop"), c = clipFor(it);
+  const opts = [["light", "Light 540p · small"], ["hd", "HD 1080p"], ["orig", "Original · full quality, largest"]];
+  p.innerHTML = opts.map(([k, l]) => `<button data-k="${k}"${it[k] ? "" : " disabled"}>${l}${it[k] ? "" : " (not made yet)"}</button>`).join("");
+  p.onclick = (e) => { const b = e.target.closest("button[data-k]"); if (!b || b.disabled) return; p.hidden = true; downloadClip(it, b.dataset.k); };
+  if (anchor.id !== "dl") {  // opened from a library card: float it next to the card button
+    const r = anchor.getBoundingClientRect(); document.body.appendChild(p);
+    p.style.cssText = `position:fixed;left:${Math.max(8, Math.min(innerWidth - 230, r.left - 150))}px;top:${Math.min(innerHeight - 140, r.bottom + 6)}px;bottom:auto`;
+  } else { $("dl").parentNode.appendChild(p); p.style.cssText = ""; }
+  p.hidden = false;
+}
+$("share").onclick = () => { const it = items[idx]; if (it) shareClip(clipFor(it) || (it.cid ? {id: it.cid, title: it.title} : null), va().currentTime); };
+$("dl").onclick = (e) => { e.stopPropagation(); const p = $("dlpop"); if (!p.hidden) { p.hidden = true; return; } if (items[idx]) openDlMenu($("dl"), items[idx]); };
+document.addEventListener("click", (e) => { if (!$("dlpop").hidden && !e.target.closest("#dlpop, #dl, [data-dl]")) $("dlpop").hidden = true; });
+
+/* ================= SEND CLIP (cut + copy/save with the helper app on this Mac) ================= */
+const HELPER = qs.get("helper") || "http://127.0.0.1:8802";
+const parseT = (t) => { const p = String(t).trim().split(":").map(Number); if (p.some((x) => !isFinite(x) || x < 0)) return NaN; return p.reduce((a, x) => a * 60 + x, 0); };
+function sMsg(t, bad) { $("s-msg").textContent = t; $("s-msg").className = "msg " + (bad ? "bad" : "muted"); }
+function toggleSend(open) {
+  const on = open ?? $("sendp").hidden; $("sendp").hidden = !on; $("send").setAttribute("aria-expanded", on);
+  if (!on) return;
+  const v = va(), t = Math.floor(v.currentTime || 0), d = isFinite(v.duration) ? v.duration : t + 30;
+  $("s-a").value = fmt(t); $("s-b").value = fmt(Math.min(d, t + 30)); sMsg("");
+  fetch(HELPER + "/ping").then((r) => r.json()).then((j) => { if (!j.ffmpeg) sMsg("The helper is running but ffmpeg wasn't found on this Mac.", true); })
+    .catch(() => sMsg("The helper isn't set up yet. Once, in Terminal, in the GoPro Travels Workspace folder, run  python3 tools/clip_helper.py --install  and then try again.", true));
+}
+$("send").onclick = () => toggleSend();
+$("send").hidden = true;
+fetch(HELPER + "/ping").then((r) => r.json()).then(() => { $("send").hidden = false; }).catch(() => {});   // only on the Mac that runs the helper
+$("s-a-now").onclick = () => { $("s-a").value = fmt(Math.floor(va().currentTime)); };
+$("s-b-now").onclick = () => { $("s-b").value = fmt(Math.ceil(va().currentTime)); };
+$("s-all").onclick = () => { $("s-a").value = "0:00"; $("s-b").value = fmt(Math.ceil(va().duration || 0)); };
+async function sendClip(action) {
+  const it = items[idx]; if (!it) return;
+  const a = parseT($("s-a").value), b = parseT($("s-b").value), size = $("s-size").value;
+  if (!isFinite(a) || !isFinite(b) || b - a < 1) return sMsg("Set a start and an end (like 1:05), with the end after the start.", true);
+  if (b - a > 900) return sMsg("Pick a section under 15 minutes.", true);
+  const pick = size === "small" ? (it.light || it.hd || it.orig) : (it.hd || it.orig || it.light);   // a smaller copy is quicker to cut from
+  const btns = ["s-copy", "s-save", "s-both"].map($); btns.forEach((x) => { x.disabled = true; });
+  sMsg("Cutting your clip… (a few seconds)");
+  try {
+    const r = await fetch(HELPER + "/make", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({id: pick, token, start: a, end: b, title: it.title, size, action, api: TEST_API || undefined})});
+    const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+    sMsg(`${j.copied ? "Copied to the clipboard: now paste it into your chat. " : ""}${j.saved || j.copied ? `Saved in Movies › Clips to send (${j.mb} MB).` : ""}`);
+    toast(j.copied ? "Copied: paste it into the chat" : "Saved to Clips to send");
+  } catch (e) {
+    sMsg(e instanceof TypeError ? "The helper didn't answer. If you haven't yet, run  python3 tools/clip_helper.py --install  once in Terminal, then try again." : "Couldn't make the clip: " + e.message, true);
+  } finally { btns.forEach((x) => { x.disabled = false; }); }
+}
+$("s-copy").onclick = () => sendClip("copy"); $("s-save").onclick = () => sendClip("save"); $("s-both").onclick = () => sendClip("both");
 
 /* ================= MULTI-VIEW ================= */
 let tiles = [], mQuality = store.get("gtp-mq", "light");
@@ -593,7 +723,7 @@ addEventListener("keydown", (e) => {
   const acts = {
     " ": () => $("playbtn").click(), k: () => $("playbtn").click(), j: () => step(-5), l: () => step(5),
     arrowleft: () => step(-1), arrowright: () => step(1), ",": () => { va().pause(); step(-1 / 30); }, ".": () => { va().pause(); step(1 / 30); },
-    "1": () => $("q-light").click(), "2": () => $("q-hd").click(), "3": () => $("q-full").click(), p: () => $("prev").click(), n: () => $("next").click(),
+    "1": () => $("q-light").click(), "2": () => $("q-hd").click(), "3": () => $("q-full").click(), p: () => $("prev").click(), n: () => $("next").click(), s: () => $("share").click(), d: () => $("dl").click(), c: () => $("send").click(),
     f: () => { const box = $("vbox"); document.fullscreenElement ? document.exitFullscreen() : (box.requestFullscreen?.() || va().webkitEnterFullscreen?.()); },
   };
   if (acts[k]) { e.preventDefault(); acts[k](); }
@@ -607,7 +737,15 @@ async function signedIn() {
   const {list, i} = readHash();
   if (list.length) { items = list; idx = Math.max(0, Math.min(i, items.length - 1)); show("play"); load(false); }
   else show("lib");
-  loadIndex().then(() => { if (view === "lib") renderLib(); if (items.length) drawQueue(); });
+  loadIndex().then(() => {
+    const h = new URLSearchParams(location.hash.slice(1)), cid = h.get("clip");   // a shared link: open straight on that clip
+    if (cid && !list.length) {
+      const c = INDEX?.byId.get(cid);
+      if (c) { const it = itemFromClip(c); it.start = Math.max(0, Number(h.get("t")) || 0); openQueue([it], 0); }
+      else { show("lib"); note("That shared clip wasn't found. Ask for a fresh link."); }
+    }
+    if (view === "lib") renderLib(); if (items.length) drawQueue();
+  });
 }
 addEventListener("hashchange", () => { const {list, i} = readHash(); if (list.length && token && list.map((x) => [x.orig, x.start, x.end].join()).join() !== items.map((x) => [x.orig, x.start, x.end].join()).join()) { items = list; idx = i; show("play"); load(false); } });
 loadToken();

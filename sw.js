@@ -11,7 +11,7 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   const m = url.pathname.match(/\/stream\/([A-Za-z0-9_-]+)$/);
   if (!m || url.origin !== self.location.origin) return;
-  e.respondWith(stream(m[1], url.searchParams.get("t"), url.searchParams.get("api") || API, e.request.headers.get("Range")));
+  e.respondWith(stream(m[1], url.searchParams.get("t"), url.searchParams.get("api") || API, e.request.headers.get("Range"), url.searchParams.get("dl")));
 });
 
 async function totalSize(id, token, api) {
@@ -23,9 +23,9 @@ async function totalSize(id, token, api) {
   return size;
 }
 
-async function stream(id, token, api, range) {
+async function stream(id, token, api, range, dl) {
   const headers = {Authorization: `Bearer ${token}`};
-  if (range) headers.Range = range;
+  if (range && !dl) headers.Range = range;
   let r;
   try {
     r = await fetch(`${api}${id}?alt=media&supportsAllDrives=true`, {headers});
@@ -38,6 +38,7 @@ async function stream(id, token, api, range) {
   // GoPro .LRV files come back as unknown binary; they are MP4 inside, and Safari won't play them unless told so
   out.set("Content-Type", ct.startsWith("video/") ? ct : "video/mp4");
   out.set("Accept-Ranges", "bytes");
+  if (dl) out.set("Content-Disposition", `attachment; filename="${dl.replace(/[^\w .()-]/g, "_")}"`); // "Download" button: save to disk, streamed
   const len = r.headers.get("Content-Length");
   if (len) out.set("Content-Length", len);
   if (r.status === 206) {
