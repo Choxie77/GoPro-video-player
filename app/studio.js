@@ -6,7 +6,7 @@
   "use strict";
   if (typeof drawPost !== "function" || typeof drawEdit !== "function") return;
   const baseEdit = drawEdit;
-  const STEPS = [["brief", "Brief"], ["moments", "Moments"], ["edit", "Edit"], ["post", "Publish"]];
+  const STEPS = [["brief", "Brief"], ["moments", "Moments"], ["edit", "Edit"], ["result", "Result"], ["post", "Publish"]];
   const PAGE = 48;
   const FILTERS = [["all", "All"], ["unused", "Not used"], ["kept", "Your picks"], ["best", "★ Best"], ["talk", "Talking"], ["action", "Action"], ["steady", "Steady"], ["change", "Scene change"]];
   const SHORT = {
@@ -490,6 +490,7 @@
   const untrimmed = (p) => p.items.filter((it) => it.a == null && bestRange(byId.get(it.clip))).length;
   function homeView(p) {
     if (p.status === "scheduled" || p.status === "posted") return "post";
+    if (waiting(p)) return "result";
     if (["edit", "render", "cut"].includes(p.status) || (p.id && editsOf(p.id).length) || waiting(p)) return "edit";
     return p.items.length ? "moments" : "brief";
   }
@@ -501,7 +502,7 @@
     if (p.status === "cut") return ["Schedule it", () => { setPostStatus("scheduled"); show("post"); }];
     if (approved(p)) return ["Copy render command", () => copy("render the approved posts", "Copied. Paste it into Claude Code")];
     if (cur) return [`Approve v${cur.v}`, () => { show("edit"); q("#ed-approve")?.click(); }];
-    if (waiting(p)) return ["Copy edit command", () => copy("edit the requested posts", "Copied. Paste it into Claude Code")];
+    if (waiting(p)) return ui.view === "result" ? ["Copy edit command", () => copy("edit the requested posts", "Copied. Paste it into Claude Code")] : ["Watch progress", () => show("result")];
     if (p.items.length < need) return ["Add moments", () => show("moments")];
     if (untrimmed(p)) return [`Pick best seconds (${untrimmed(p)})`, () => { show("moments"); autoPick(); }];
     return ["Make the edit", () => show("edit")];
@@ -511,9 +512,10 @@
     if (k === "brief") return (p.brief.story || "").trim() ? `${p.brief.length ? p.brief.length + " s · " : ""}${p.brief.aspect}` : "Story not written";
     if (k === "moments") return p.items.length ? `${p.items.length} · ${len(total(p))}${untrimmed(p) ? ` · ${untrimmed(p)} untrimmed` : ""}` : "None yet";
     if (k === "edit") return approved(p) ? `v${p.edit} approved` : waiting(p) ? ({editing: "Claude is editing", rendering: "Rendering"}[window.__requestInfo?.(p.id)?.stage] || "Waiting for the auto-editor") : vers.length ? `${vers.length} version${vers.length > 1 ? "s" : ""} to review` : "Not requested";
+    if (k === "result") { const i = window.__requestInfo?.(p.id); return waiting(p) ? ({editing: "Claude is editing", rendering: "Rendering"}[i?.stage] || "Waiting for the Mac") : i?.status === "failed" ? "Edit failed" : vers.length ? "Watch the video" : "Nothing yet"; }
     return p.status === "posted" ? "Posted" : p.status === "scheduled" ? `Scheduled${p.scheduled ? " " + fmtShort(p.scheduled) : ""}` : p.scheduled ? `Planned ${fmtShort(p.scheduled)}` : "No date";
   }
-  const stepDone = (k, p) => k === "brief" ? !!(p.brief.story || "").trim() : k === "moments" ? p.items.length > 0 && !untrimmed(p) : k === "edit" ? approved(p) : p.status === "posted";
+  const stepDone = (k, p) => k === "brief" ? !!(p.brief.story || "").trim() : k === "moments" ? p.items.length > 0 && !untrimmed(p) : k === "edit" ? approved(p) : k === "result" ? !!(p.renderUrl || ["cut", "scheduled", "posted"].includes(p.status)) : p.status === "posted";
   function drawChrome() {
     const p = draft, rail = q("#sx-rail"), slot = q("#sx-next"); if (!p || !rail) return;
     rail.innerHTML = STEPS.map(([k, n], i) => `<button data-v="${k}" class="${stepDone(k, p) ? "done" : ""}" ${ui.view === k ? 'aria-current="step"' : ""}><i>${stepDone(k, p) ? "✓" : i + 1}</i><b>${n}</b><span>${esc(stepNote(k, p))}</span></button>`).join("");
@@ -523,12 +525,12 @@
     if (!canSave() && a) q("#sx-go").disabled = true;
     ui.sig = signature(p);
   }
-  const signature = (p) => [p.status, p.edit, waiting(p), p.id ? editsOf(p.id).length : 0].join("|");
+  const signature = (p) => [p.status, p.edit, waiting(p), p.id ? editsOf(p.id).length : 0, window.__requestInfo?.(p.id)?.stage, window.__requestInfo?.(p.id)?.status].join("|");
 
   /* ---------- frame ---------- */
   drawPost = function () {
     const p = draft;
-    if (ui.post !== p) Object.assign(ui, {post: p, view: homeView(p), sel: null, t: 0, filter: "all", day: "near", shown: PAGE, undo: [], redo: [], reqNote: "", how: "claude", query: "", week: 0});
+    if (ui.post !== p) Object.assign(ui, {post: p, view: homeView(p), sel: null, t: 0, filter: "all", day: "near", shown: PAGE, undo: [], redo: [], reqNote: "", how: "claude", query: "", week: 0, rsV: null});
     $("pdlg").classList.add("studio");
     $("pdetail").innerHTML = `
       <header class="sx-head">
@@ -556,9 +558,9 @@
     flushEdit(); killDecks();
     ui.view = v;
     const box = $("sx-view");
-    box.innerHTML = v === "moments" ? `<div id="st-moments"></div>` : v === "edit" ? `<section class="sx-edit" id="st-edit"></section>` : `<div id="st-brief"></div>`;
+    box.innerHTML = v === "moments" ? `<div id="st-moments"></div>` : v === "edit" ? `<section class="sx-edit" id="st-edit"></section>` : v === "result" ? `<section class="rs" id="st-result"></section>` : `<div id="st-brief"></div>`;
     box.scrollTop = 0;
-    if (v === "moments") drawMoments(); else if (v === "edit") drawEdit(); else drawBrief();
+    if (v === "moments") drawMoments(); else if (v === "edit") drawEdit(); else if (v === "result") drawResult(); else drawBrief();
     drawChrome();
     if (!canSave()) $("pdetail").querySelectorAll("input,select,textarea,button:not(#p-close):not([data-v])").forEach((x) => { x.disabled = true; });
   }
@@ -1239,7 +1241,8 @@
       ${big ? `<p>When the auto-editor is running on your Mac it starts within a minute, edits, renders and puts the finished video here. If nothing happens, open Claude Code and paste <b>edit the requested posts</b>. This page updates by itself, no reload needed.</p>` : ""}
       ${info?.at ? `<p>Requested ${esc(new Date(info.at).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}))} · ${esc(ago(info.at))}${info.mode && info.mode !== "first" ? ` · ${esc(info.mode)}` : ""}</p>` : ""}
       ${big && sent ? `<details><summary class="muted small">What you sent</summary><pre>${esc(sent)}</pre></details>` : ""}</div>
-      <div class="sx-acts"><button class="sx-btn main" data-w="copy">Copy command</button>${window.__requestCancel ? `<button class="sx-btn" data-w="cancel">Cancel request</button>` : ""}</div>`;
+      <div class="sx-acts">${big ? "" : `<button class="sx-btn main" data-w="watch">Watch progress</button>`}<button class="sx-btn ${big ? "main" : ""}" data-w="copy">Copy command</button>${window.__requestCancel ? `<button class="sx-btn" data-w="cancel">Cancel request</button>` : ""}</div>`;
+    const wt = q('[data-w="watch"]', el); if (wt) wt.onclick = () => show("result");
     const cp = q('[data-w="copy"]', el);
     if (cp) cp.onclick = () => copy("edit the requested posts", "Copied. Paste it into Claude Code");
     const c = q('[data-w="cancel"]', el);
@@ -1610,15 +1613,159 @@
     drawEditor(cur);
     drawChrome();
   };
+  /* ---------- result: live progress of the edit + the rendered video (with its subtitles) ---------- */
+  const rcss = document.createElement("style");
+  rcss.textContent = `
+    .rs { height: 100%; overflow: auto; padding: 16px; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 16px; align-content: start; align-items: start; }
+    .rs-col { display: grid; gap: 12px; min-width: 0; align-content: start; }
+    .rs h2 { margin: 0; font-size: 18px; } .rs h3 { margin: 0 0 8px; font-size: 14px; }
+    .rs-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .rs-steps li { display: grid; gap: 2px; padding: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; font-size: 12px; color: var(--muted); min-width: 0; }
+    .rs-steps li b { font-size: 13px; color: var(--ink); } .rs-steps li.done { border-color: var(--ink); } .rs-steps li.now { border-color: var(--ink); background: var(--surface); outline: 2px solid var(--ink); outline-offset: -2px; }
+    .rs-steps li.fail { border-color: #b3261e; } .rs-steps li.fail b { color: #b3261e; }
+    .rs-now { display: grid; gap: 6px; margin-top: 10px; } .rs-now b { font-size: 15px; } .rs-now p { margin: 0; font-size: 13px; color: var(--muted); }
+    .rs-bar { height: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; } .rs-bar i { display: block; height: 100%; background: var(--ink); transition: width .8s linear; }
+    .rs-chips { display: flex; flex-wrap: wrap; gap: 6px; } .rs-chips span { padding: 2px 8px; font-size: 12px; color: var(--muted); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; }
+    .rs-vers { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; } .rs-vers button { min-height: 32px; padding: 4px 12px; font: inherit; font-size: 13px; font-weight: 650; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+    .rs-vers button[aria-pressed="true"] { color: var(--surface); background: var(--ink); border-color: var(--ink); } .rs-vers small { color: var(--muted); font-size: 11px; font-weight: 500; }
+    .rs-phone { position: relative; justify-self: center; background: #000; border-radius: 8px; overflow: hidden; max-width: 100%; }
+    .rs-phone video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+    .rs-none { display: grid; place-items: center; text-align: center; padding: 24px; color: #ddd; font-size: 13px; gap: 8px; } .rs-none b { color: #fff; font-size: 14px; }
+    @media (max-width: 900px) { .rs { grid-template-columns: minmax(0, 1fr); } .rs-steps { grid-template-columns: 1fr 1fr; } }`;
+  document.head.append(rcss);
+  const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+  const clock = (iso) => (iso ? new Date(iso).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}) : "");
+  const rsFiles = {at: 0, key: "", map: new Map(), busy: false};
+  async function findRenders(id, force) {
+    if (!BR?.find || !id) return rsFiles.map;
+    if (!force && rsFiles.key === id && Date.now() - rsFiles.at < 15000) return rsFiles.map;
+    if (rsFiles.busy) return rsFiles.map;
+    rsFiles.busy = true;
+    try {
+      const list = await BR.find(`name contains '${id}-v' and name contains '.mp4' and trashed=false`, "files(id,name,size,modifiedTime)");
+      const map = new Map();
+      for (const f of list || []) { const m = f.name.match(/-v(\d+)(-web)?\.mp4$/); if (!m) continue; const e = map.get(+m[1]) || {}; e[m[2] ? "web" : "full"] = f; map.set(+m[1], e); }
+      Object.assign(rsFiles, {map, key: id, at: Date.now()});
+    } catch (e) { /* Drive unavailable: the page still shows progress */ } finally { rsFiles.busy = false; }
+    return rsFiles.map;
+  }
+  // Where the request is, from the fields tools/auto_editor.py writes: stage, stageAt, pickedAt, renderAt, readyAt, detail, usedModel/usedEffort.
+  function progressOf(p) {
+    const i = p.id ? window.__requestInfo?.(p.id) : null;
+    if (!i) return null;
+    const st = i.status === "failed" ? "failed" : i.status === "cancelled" ? "cancelled" : i.stage === "ready" && i.status !== "waiting" ? "ready" : i.stage === "rendering" ? "rendering" : i.stage === "editing" ? "editing" : i.status === "waiting" ? "sent" : "ready";
+    return {i, st, n: {sent: 0, editing: 1, rendering: 2, ready: 4, failed: -1, cancelled: -1}[st]};
+  }
+  function drawProgress(el) {
+    const p = draft, pg = p && progressOf(p);
+    if (!pg) { el.innerHTML = `<h2>No edit requested yet</h2><p class="muted small" style="margin:6px 0 0">Ask Claude for an edit and its progress shows up here, then the finished video with its subtitles.</p><div class="sx-acts" style="margin-top:10px"><button class="sx-btn main" data-rs="edit">Go to Edit</button></div>`; return; }
+    const {i, st} = pg, now = Date.now(), at = (x) => (x ? new Date(x).getTime() : 0);
+    const stamp = {0: i.at, 1: i.pickedAt, 2: i.renderAt || (i.stage === "rendering" ? i.stageAt : ""), 3: i.readyAt};
+    const lens = (editsOf(p.id).at(-1)?.edl?.length) || +p.brief.length || 30;
+    const since = st === "sent" ? at(i.at) : st === "editing" ? at(i.pickedAt || i.stageAt) : st === "rendering" ? at(i.renderAt || i.stageAt) : 0;
+    const el1 = since ? now - since : 0;
+    const frac = st === "sent" ? 0.03 : st === "editing" ? 0.08 + 0.4 * Math.min(1, el1 / 180000) : st === "rendering" ? 0.5 + 0.45 * Math.min(1, el1 / (lens * 30000)) : st === "ready" ? 1 : 0;
+    const titles = ["Request sent", "Claude edits", "Video renders", "Ready"];
+    const lis = titles.map((t, k) => {
+      const cls = st === "failed" ? (k < (i.stage === "rendering" ? 2 : i.stage === "editing" ? 1 : 0) ? "done" : k === (i.stage === "rendering" ? 2 : i.stage === "editing" ? 1 : 0) ? "fail" : "") : st === "cancelled" ? (k === 0 ? "done" : "") : k < pg.n ? "done" : k === pg.n ? "now" : "";
+      const sub = k <= 3 && stamp[k] && (cls === "done" || cls === "now" || cls === "fail") ? clock(stamp[k]) : k === 0 ? "" : "waiting";
+      return `<li class="${cls}"><b>${cls === "done" ? "✓ " : cls === "fail" ? "! " : ""}${t}</b><span>${esc(sub)}</span></li>`;
+    }).join("");
+    let head = "", body = "", extra = "";
+    if (st === "sent") {
+      const w = now - at(i.at);
+      head = "Waiting for the auto-editor on your Mac";
+      body = w > 150000 ? `Nothing picked this up for ${mmss(w)}. The auto-editor may be off. Open Claude Code and paste <b>edit the requested posts</b>, or press Copy command.` : "It checks every 30 seconds, so it should start within a minute.";
+    } else if (st === "editing") {
+      head = `Claude is editing · ${mmss(el1)}`;
+      body = esc(i.detail || "It reads your clips, chooses the order, the seconds and the framing, then writes the cut. Usually 2–4 minutes.");
+    } else if (st === "rendering") {
+      const eta = Math.max(0, lens * 30000 - el1);
+      head = `Rendering the video · ${mmss(el1)}`;
+      body = esc(i.detail || "Made from the 4K originals on your Mac, with the subtitles and sound.") + (eta > 0 ? ` About ${mmss(eta)} left (estimate).` : " Nearly done.");
+    } else if (st === "ready") {
+      head = `Ready${i.readyAt ? " · " + clock(i.readyAt) : ""}${i.v ? ` · v${i.v}` : ""}`;
+      body = "The finished video is on the right. Ask Claude for changes from the Edit step and the progress starts again here.";
+    } else if (st === "failed") {
+      head = "The edit failed"; body = esc(i.error || "No reason given.");
+      extra = `<div class="sx-acts"><button class="sx-btn main" data-rs="retry">Try again</button></div>`;
+    } else { head = "Request cancelled"; body = "Nothing was changed."; }
+    const chips = [i.usedModel ? `Claude ${i.usedModel}${i.usedEffort ? " · " + i.usedEffort + " effort" : ""}` : "", i.mode && i.mode !== "first" ? `Request: ${i.mode}` : "", i.at ? `Asked ${clock(i.at)}` : ""].filter(Boolean);
+    const sent = (i.note || "").trim();
+    el.innerHTML = `<h2>Edit progress</h2>
+      <ol class="rs-steps" style="margin-top:10px" aria-label="Progress of the edit">${lis}</ol>
+      <div class="rs-now"><b>${head}</b><p>${body}</p>${st === "sent" || st === "editing" || st === "rendering" ? `<div class="rs-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(frac * 100)}"><i style="width:${Math.round(frac * 100)}%"></i></div><p class="small">This page updates by itself. You can close it.</p>` : ""}${extra}</div>
+      ${chips.length ? `<div class="rs-chips" style="margin-top:10px">${chips.map((c) => `<span>${esc(c)}</span>`).join("")}</div>` : ""}
+      ${sent ? `<details style="margin-top:8px"><summary class="muted small">What you asked for</summary><pre style="margin:6px 0 0;white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace">${esc(sent)}</pre></details>` : ""}
+      ${st === "sent" || st === "editing" || st === "rendering" ? `<div class="sx-acts" style="margin-top:10px"><button class="sx-btn" data-rs="copy">Copy command</button>${window.__requestCancel && st === "sent" ? `<button class="sx-btn" data-rs="cancel">Cancel request</button>` : ""}</div>` : ""}`;
+  }
+  function resultTick() {
+    const el = $("rs-prog");
+    if (!el || ui.view !== "result" || !draft || !$("pdlg").open) return;
+    const pg = progressOf(draft);
+    if (pg && ["sent", "editing", "rendering"].includes(pg.st)) {
+      drawProgress(el);
+      const t = (resultTick.n = (resultTick.n || 0) + 1);
+      if (t % 8 === 0) window.__gtaPull?.();   // look for the Mac's progress in Drive now, instead of waiting for the 30 s check
+      if (t % 15 === 0 && pg.st === "rendering") findRenders(draft.id, true);
+    }
+  }
+  async function drawResult() {
+    const box = $("st-result"), p = draft; if (!box || !p) return;
+    const vers = p.id ? editsOf(p.id) : [], cur = vers.find((e) => e.v === ui.rsV) || vers.at(-1);
+    box.innerHTML = `<div class="rs-col"><div class="sx-card2" id="rs-prog"></div>
+        <div class="sx-card2" id="rs-info"></div></div>
+      <div class="rs-col"><div class="sx-card2"><div class="ex-hd"><h2>Final video</h2><span class="muted small" id="rs-meta"></span></div>
+        <div class="rs-vers" id="rs-vers" style="margin:10px 0">${vers.length ? vers.map((e) => `<button data-v="${e.v}" aria-pressed="${cur?.v === e.v}">v${e.v}</button>`).join("") : `<span class="muted small">No version yet.</span>`}</div>
+        <div id="rs-player"></div></div></div>`;
+    drawProgress($("rs-prog"));
+    const info = $("rs-info"), by = cur ? ({adam: "by hand", claude: "by Claude", "claude+adam": "Claude + you"}[cur.by] || cur.by || "") : "";
+    info.innerHTML = cur ? `<h3>v${cur.v}${by ? " · " + esc(by) : ""}</h3>${cur.edl.summary ? `<p class="sx-say">${esc(cur.edl.summary)}</p>` : ""}${(cur.edl.questions || []).length ? `<b style="font-size:13px">Claude asks</b>${cur.edl.questions.map((x) => `<p class="sx-say">${esc(x)}</p>`).join("")}` : ""}
+      <div class="sx-acts"><button class="sx-btn main" data-rs="edit">Change this edit</button>${p.renderUrl ? `<a class="sx-btn" href="${esc(p.renderUrl)}" target="_blank" rel="noopener">Open in Drive</a>` : ""}<button class="sx-btn" data-rs="post">Go to Publish</button></div>` : `<h3>The edit will show up here</h3><p class="sx-say">When Claude finishes, you get its summary and the rendered video.</p>`;
+    box.onclick = (e) => {
+      const b = e.target.closest("[data-v],[data-rs]"); if (!b) return;
+      if (b.dataset.v) { ui.rsV = +b.dataset.v; drawResult(); return; }
+      const a = b.dataset.rs;
+      if (a === "edit") show("edit");
+      else if (a === "post") show("post");
+      else if (a === "copy") copy("edit the requested posts", "Copied. Paste it into Claude Code");
+      else if (a === "cancel") { b.disabled = true; window.__requestCancel(p.id).then(() => { drawResult(); drawChrome(); }); }
+      else if (a === "retry") { b.disabled = true; window.__requestEdit(p.id, "first", noteText(p)).then(() => { ui.rsV = null; drawResult(); drawChrome(); }); }
+    };
+    const slot = $("rs-player");
+    if (!cur) { slot.innerHTML = `<div class="rs-phone" style="aspect-ratio:9 / 16;width:min(100%,260px)"><div class="rs-none" style="position:absolute;inset:0"><b>No video yet</b>Once Claude has made an edit and your Mac has rendered it, you watch it here with its subtitles.</div></div>`; return; }
+    const [w, h] = ASPECT[cur.edl.aspect || "9:16"] || ASPECT["9:16"], ratio = w / h, mine = p.id, ver = cur.v;
+    const phone = (inner) => `<div class="rs-phone" style="aspect-ratio:${w} / ${h};width:min(100%, calc((100dvh - 330px) * ${ratio.toFixed(4)}))">${inner}</div>`;
+    slot.innerHTML = phone(`<div class="rs-none" style="position:absolute;inset:0"><b>Looking for the rendered video…</b></div>`);
+    const map = await findRenders(mine, true);
+    if (draft !== p || ui.view !== "result" || $("rs-player") !== slot) return;
+    $("rs-vers").querySelectorAll("button").forEach((b) => { const r = map.get(+b.dataset.v); b.innerHTML = `v${b.dataset.v}${r ? "" : ` <small>not rendered</small>`}`; });
+    const f = map.get(ver)?.web || map.get(ver)?.full;
+    if (!f) {
+      const rendering = progressOf(p)?.st === "rendering" && (progressOf(p).i.v == null || progressOf(p).i.v === ver || ver === vers.at(-1).v);
+      slot.innerHTML = phone(`<div class="rs-none" style="position:absolute;inset:0"><b>${rendering ? "This version is rendering" : `v${ver} hasn't been rendered`}</b>${rendering ? "It appears here by itself when it is done." : "Auto edits are rendered on your Mac. For a version you cut by hand, approve it in Edit, then paste “render the approved posts” into Claude Code."}</div>`);
+      $("rs-meta").textContent = "";
+      return;
+    }
+    $("rs-meta").textContent = `Rendered ${f.modifiedTime ? clock(f.modifiedTime) : ""}${f.size ? " · " + (f.size / 1048576).toFixed(0) + " MB" : ""}`;
+    slot.innerHTML = phone(`<video controls playsinline preload="metadata" id="rs-vid"></video>`) + `<p class="muted small" style="text-align:center;margin:8px 0 0">This is the real render: subtitles, text and sound are in the video.</p>`;
+    const vid = $("rs-vid"); let retried = false;
+    vid.addEventListener("error", async () => { if (retried) return; retried = true; await BR.token(); vid.src = BR.streamUrl(f.id); });
+    await BR.token?.(); vid.src = BR.streamUrl(f.id);
+  }
+
   const request = window.__requestEdit;
   if (request) window.__requestEdit = async (...args) => {
     await request(...args);
+    ui.rsV = null;
+    if (draft && $("pdlg").open && ui.view === "edit") queueMicrotask(() => show("result"));
     if (draft && ["idea", "clips", "", undefined].includes(draft.status)) { draft.status = "edit"; queueSave(); }
     drawChrome();
   };
   // Results from Claude Code arrive through the saved-data sync; show them without a reload.
   setInterval(() => {
     if (!draft || !$("pdlg").open || !q("#sx-rail") || signature(draft) === ui.sig) return;
-    if (ui.view === "edit" && !document.activeElement?.matches("textarea,input")) drawEdit(); else drawChrome();
+    if (ui.view === "edit" && !document.activeElement?.matches("textarea,input")) drawEdit(); else if (ui.view === "result") { drawChrome(); drawResult(); } else drawChrome();
   }, 2000);
+  setInterval(resultTick, 1000);
 })();
