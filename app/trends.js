@@ -161,14 +161,15 @@
           el("div", {className: "gtat-meta"},
             el("b", {textContent: [place, c.day ? `Day ${c.day}` : ""].filter(Boolean).join(" · ") || "Matched clip"}),
             el("span", {className: "f", title: fname, textContent: fname}),
-            el("span", {className: "gtat-match"}, el("span", {className: "m"}, el("i", {style: `width:${match}%`})), `${match}% scene match`))),
+            el("span", {className: "gtat-match"}, el("span", {className: "m"}, el("i", {style: `width:${match}%`})), best.c.ai_score != null ? `AI pick ${best.c.ai_score}/10` : `${match}% scene match`),
+            best.c.why ? el("span", {className: "f", title: best.c.why, textContent: best.c.why, style: "white-space:normal"}) : null)),
         el("div", {className: "gtat-acts"},
           el("button", {className: "btn", type: "button", textContent: "Start a post from this", onclick: (e) => { e.target.disabled = true; startPost(t.name, ex[0], best).finally(() => { e.target.disabled = false; }); }}),
           href ? el("a", {className: "btn quiet", href, target: "gopro-player", rel: "noopener", textContent: "▶ Watch it", style: "flex:0 0 auto"}) : null));
     } else {
       foot = el("div", {className: "gtat-foot"},
         el("p", {className: "gtat-sub", style: "margin:0", textContent: "Your footage for it"}),
-        el("p", {className: "gtat-empty gtat-none", textContent: `No tagged clip fits yet (${data.clips_considered} scanned). This fills in as clips get scene tags.`}));
+        el("p", {className: "gtat-empty gtat-none", textContent: `No clip is strong enough yet (${data.clips_considered} scanned). New clips are judged automatically.`}));
     }
     return el("article", {className: "gtat-card"},
       el("div", {className: "gtat-head"},
