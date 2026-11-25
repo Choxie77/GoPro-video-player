@@ -123,6 +123,8 @@ body:has(#ownerbar){padding-bottom:170px}
 body:has(#ownerbar) .toast{bottom:auto;top:16px;z-index:60}
 .card .note{display:block;font-style:normal;color:var(--mute);font-size:12px;margin-top:2px}.card .cm{display:inline-block;margin-top:2px;font-size:12px;color:var(--accent)}
 #od{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;max-width:min(680px,94vw);width:100%;max-height:86vh;padding:16px}#od::backdrop{background:#000a}#od h3{margin:0 0 8px}#od table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px}#od td{padding:3px 6px;border-bottom:1px solid var(--line)}#od td:last-child{text-align:right;color:var(--mute)}#od .cmt{border-bottom:1px solid var(--line);padding:8px 0}#od .cmt small{color:var(--mute)}
+.card.tsel{outline:3px solid var(--accent);outline-offset:-3px}
+#tagbar{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);z-index:51;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:8px 12px;font-size:13px;box-shadow:0 6px 24px #0008;max-width:calc(100vw - 24px)}#tagbar .btn{padding:4px 10px;font-size:12.5px}#tagbar input{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:4px 8px}
 </style>
 </head>
 <body>
@@ -297,10 +299,14 @@ const tk=()=>encodeURIComponent(token||"");
 async function loadFeed(){try{
   if(!OWNER&&qs.get("owner")!=="0"){const w=await (await fetch(`${BACK}?action=whoami&token=${tk()}`)).json();if(w.owner){OWNER=true;prep();buildDays();ownerBar()}}
   const r=await (await fetch(`${BACK}?action=feed&token=${tk()}`)).json();if(r.error)return;FEED=r;FEED.comments=FEED.comments||{};FEED.notes=FEED.notes||{};applyNotes()}catch(e){}}
-function applyNotes(){let ch=false;for(const c of INDEX.clips){const n=FEED.notes[c.id];if(n&&(n.title!==c.title||n.desc!==c.desc)){c.title=n.title||c.title;c.desc=n.desc||c.desc;ch=true}}
+const MARK=/\[with ([^\]]+)\]/g;
+function applyNotes(){let ch=false;for(const c of INDEX.clips){const n=FEED.notes[c.id];if(c._t0===undefined){c._t0=c.title;c._d0=c.desc;c._g0=c.tags||[];c._p0=c.pp||[]}
+    const raw=n?String(n.desc||""):"",who=[...raw.matchAll(MARK)].map(m=>m[1].trim()).filter(Boolean),vis=raw.replace(MARK,"").trim();
+    const title=(n&&n.title)||c._t0,desc=(n&&vis)||c._d0,pp=[...new Set([...c._p0,...who])],tags=[...new Set([...c._g0,...who,...who.map(x=>"with "+x)])];
+    if(title!==c.title||desc!==c.desc||pp.join()!==(c.pp||[]).join()){c.title=title;c.desc=desc;c.pp=pp;c.tags=tags;ch=true}}
   if(ch){vocab.v=null;prep();buildDays()}try{render()}catch(e){}}
 const postBack=d=>fetch(BACK,{method:"POST",mode:"no-cors",body:JSON.stringify({...d,token})}).catch(()=>{});
-const noteLine=c=>{const n=FEED.notes[c.id],k=(FEED.comments[c.id]||[]).length;return (n&&n.desc?`<em class="note">${esc(n.desc.slice(0,90))}</em>`:"")+(k?`<span class="cm">💬 ${k}</span>`:"")};
+const noteLine=c=>{const n=FEED.notes[c.id],k=(FEED.comments[c.id]||[]).length;return (n&&String(n.desc||"").replace(MARK,"").trim()?`<em class="note">${esc(String(n.desc).replace(MARK,"").trim().slice(0,90))}</em>`:"")+(k?`<span class="cm">💬 ${k}</span>`:"")};
 async function loadIndex(){
   const last=store.get("gtx-last",null),hit=last&&await cget(last.key);
   if(hit){   // show the saved copy now; swap in a newer one if Drive has it
@@ -497,7 +503,7 @@ const hasFilter=()=>S.person||S.q||S.country||S.place||S.range||S.cell||S.picks|
 function cardHTML(c,i,f){
   const sn=f?snippet(c,f):null;c._sn=sn;
   const hh=HEART[c.id];
-  return `<div class="card" role="button" tabindex="0" data-i="${i}" data-id="${c.id}"><div class="th" data-id="${c.id}"><span class="du">${fmtDur(c.dur)}</span>${c.pick>=2?'<span class="star">★ Adam\'s pick</span>':""}<span class="ic"><button type="button" data-act="heart" class="${hh?"on":""}" aria-label="${hh?"Remove heart":"Heart this clip"}" title="Heart">${hh?"♥":"♡"}</button><button type="button" data-act="share" aria-label="Copy a link to this clip" title="Copy link">⤴</button>${OWNER&&BACK?'<button type="button" data-act="note" aria-label="Edit my note" title="Add a title or description">✎</button>':""}${OWNER?'<button type="button" data-act="hide" aria-label="Hide from friends" title="Hide from friends">🚫</button>':""}</span></div><div class="tx"><b>${esc(c.o.label)}</b><span>${fmtDate(c.t)} · ${c.t.slice(11,16)} · Day ${c.day??"–"}</span>${noteLine(c)}${sn?`<em class="snip">“${sn.html}” <small>${fmtDur(sn.a)}</small></em>`:""}</div></div>`;
+  return `<div class="card${TAG.on&&TAG.sel.has(c.id)?" tsel":""}" role="button" tabindex="0" data-i="${i}" data-id="${c.id}"><div class="th" data-id="${c.id}"><span class="du">${fmtDur(c.dur)}</span>${c.pick>=2?'<span class="star">★ Adam\'s pick</span>':""}<span class="ic"><button type="button" data-act="heart" class="${hh?"on":""}" aria-label="${hh?"Remove heart":"Heart this clip"}" title="Heart">${hh?"♥":"♡"}</button><button type="button" data-act="share" aria-label="Copy a link to this clip" title="Copy link">⤴</button>${OWNER&&BACK?'<button type="button" data-act="note" aria-label="Edit my note" title="Add a title or description">✎</button>':""}${OWNER?'<button type="button" data-act="hide" aria-label="Hide from friends" title="Hide from friends">🚫</button>':""}</span></div><div class="tx"><b>${esc(c.o.label)}</b><span>${fmtDate(c.t)} · ${c.t.slice(11,16)} · Day ${c.day??"–"}</span>${noteLine(c)}${sn?`<em class="snip">“${sn.html}” <small>${fmtDur(sn.a)}</small></em>`:""}</div></div>`;
 }
 function render(){
   const out=run();LAST=out;LASTF=out.f;RES=sortRes(out.res).map(x=>x[1]);MAPDIRTY=GDIRTY=true;CELLS=null;
@@ -659,7 +665,9 @@ function cardAct(e){
 $("grid").addEventListener("click",e=>{
   if(cardAct(e))return;
   const d=e.target.closest(".dayh");if(d){S.range=[d.dataset.d,d.dataset.d];S.view="grid";render();const c=CH.find(x=>x.a<=d.dataset.d&&x.b>=d.dataset.d);if(c)flyTo(c.lon,c.lat);return}
-  const b=e.target.closest(".card");if(!b)return;const i=+b.dataset.i;openList(RES,i,RES[i]._sn?.a)});
+  const b=e.target.closest(".card");if(!b)return;
+  if(TAG.on){const id=b.dataset.id;TAG.sel.has(id)?TAG.sel.delete(id):TAG.sel.add(id);b.classList.toggle("tsel",TAG.sel.has(id));tagBar();return}
+  const i=+b.dataset.i;openList(RES,i,RES[i]._sn?.a)});
 $("grid").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.classList.contains("card"))e.target.click()});
 async function ownerGet(a,extra=""){const r=await (await fetch(`${BACK}?action=${a}&token=${tk()}${extra}`)).json();if(r.error){toast("Only your owner accounts can open this.");return null}return r}
 function dlg(html){let d=document.getElementById("od");if(!d){d=document.createElement("dialog");d.id="od";document.body.append(d)}d.innerHTML=html+`<p style="text-align:right;margin:8px 0 0"><button class="btn" id="odx">Close</button></p>`;d.querySelector("#odx").onclick=()=>d.close();d.showModal();return d}
@@ -677,18 +685,35 @@ async function openInbox(){const r=await ownerGet("inbox","&since="+encodeURICom
 async function openStats(){const r=await ownerGet("stats");if(!r)return;
   const tb=(h,rows)=>`<h4 style="margin:10px 0 4px">${h}</h4><table>${rows.map(x=>`<tr><td>${esc(x.label||x.k)}</td><td>${x.n}</td></tr>`).join("")||"<tr><td>Nothing yet</td><td></td></tr>"}</table>`;
   dlg(`<h3>Who watches what</h3><p><b>${r.totals.views}</b> views · <b>${r.totals.viewers}</b> named viewers · <b>${r.totals.comments}</b> comments</p>${tb("Most watched clips",r.topClips)}${tb("Most watched places",r.topPlaces)}${tb("Most active viewers",r.topViewers)}${tb("Most commented",r.mostCommented)}${tb("Views per day (last 30 days)",r.perDay)}<h4 style="margin:10px 0 4px">Latest views</h4><table>${r.recent.map(x=>`<tr><td>${esc(x.name||"Someone")} watched ${esc(x.label)}</td><td>${esc(x.ts.slice(5,16).replace("T"," "))}</td></tr>`).join("")}</table>`)}
-function editNote(id){const c=INDEX.byId.get(id),n=FEED.notes[id]||{};
+function editNote(id){const c=INDEX.byId.get(id),n=FEED.notes[id]||{},raw=String(n.desc||""),marks=raw.match(MARK)||[],vis=raw.replace(MARK,"").trim();
   const t=prompt("Title for friends (empty keeps the automatic one)",n.title||c.title||"");if(t===null)return;
-  const d=prompt("Your description or note for this moment",n.desc||c.desc||"");if(d===null)return;
-  postBack({action:"note",clip:id,title:t,desc:d});FEED.notes[id]={title:t,desc:d};applyNotes();toast("Saved. Everyone sees it on their next visit.")}
+  const d=prompt("Your description or note for this moment",vis||c.desc||"");if(d===null)return;
+  const full=[d.trim(),...marks].filter(Boolean).join(" ");postBack({action:"note",clip:id,title:t,desc:full});FEED.notes[id]={title:t,desc:full};applyNotes();toast("Saved. Everyone sees it on their next visit.")}
+/* Tag people by hand (owner): pick clips, name the person; stored as "[with Gaja]" in the clip's note, so search, the People row and everyone's page pick it up. */
+const TAG={on:false,sel:new Set()};
+function tagBar(){let b=document.getElementById("tagbar");if(!TAG.on){b&&b.remove();return}
+  if(!b){b=document.createElement("div");b.id="tagbar";document.body.append(b);
+    b.onclick=async e=>{const k=e.target.dataset?.t;if(!k)return;
+      if(k==="all"){RES.forEach(c=>TAG.sel.add(c.id))}
+      else if(k==="clear")TAG.sel.clear();
+      else if(k==="done"){TAG.on=false;TAG.sel.clear()}
+      else{const name=(document.getElementById("tagname").value||"").trim();if(!name)return toast("Type who is in these clips.");const ids=[...TAG.sel];if(!ids.length)return toast("Tap some clips first.");
+        const one=async id=>{const nn=FEED.notes[id]||{},raw=String(nn.desc||""),has=[...raw.matchAll(MARK)].some(m=>m[1].trim().toLowerCase()===name.toLowerCase());
+          let desc=raw;if(k==="add"&&!has)desc=(raw+" [with "+name+"]").trim();else if(k==="remove")desc=raw.replace(MARK,m=>m.slice(6,-1).trim().toLowerCase()===name.toLowerCase()?"":m).replace(/\s+/g," ").trim();else return;
+          FEED.notes[id]={title:nn.title||"",desc};postBack({action:"note",clip:id,title:nn.title||"",desc})};
+        for(let i=0;i<ids.length;i+=6){await Promise.all(ids.slice(i,i+6).map(one));toast(`${Math.min(i+6,ids.length)} of ${ids.length}…`);await new Promise(r=>setTimeout(r,250))}
+        TAG.sel.clear();applyNotes();toast(`${k==="add"?"Tagged":"Untagged"} ${ids.length} clips as ${name}. Everyone sees it on their next visit.`);setTimeout(loadFeed,4000)}
+      tagBar();document.querySelectorAll("#grid .card").forEach(c=>c.classList.toggle("tsel",TAG.sel.has(c.dataset.id)))}}
+  b.innerHTML=`<b>👤 Tag people</b><span>Tap clips to select them.</span><input id="tagname" value="${esc(document.getElementById("tagname")?.value||"Gaja")}" aria-label="Who is in them" size="10"><span>${TAG.sel.size} selected</span><button class="btn" data-t="all">Select all ${RES.length} shown</button><button class="btn" data-t="clear">Clear</button><button class="btn pri" data-t="add">Tag them</button><button class="btn" data-t="remove">Remove tag</button><button class="btn" data-t="done">Done</button>`}
 function ownerBar(){
   if(!OWNER)return;let b=document.getElementById("ownerbar");if(!b){b=document.createElement("div");b.id="ownerbar";document.body.append(b)}
-  const n=HIDE.size;b.innerHTML=`<b>Owner mode</b><span>${n} clip${n===1?"":"s"} hidden</span><button class="btn" data-o="copy" ${n?"":"disabled"}>Copy hide command</button><button class="btn" data-o="undo" ${n?"":"disabled"}>Undo last</button><button class="btn" data-o="clear" ${n?"":"disabled"}>Show all again</button>${BACK?`<button class="btn" data-o="inbox">🔔 Inbox<span id="inboxn"></span></button><button class="btn" data-o="stats">📊 Stats</button>`:""}<button class="btn" data-o="exit" title="See the page the way friends see it">Friend view</button>`;
+  const n=HIDE.size;b.innerHTML=`<b>Owner mode</b><span>${n} clip${n===1?"":"s"} hidden</span><button class="btn" data-o="copy" ${n?"":"disabled"}>Copy hide command</button><button class="btn" data-o="undo" ${n?"":"disabled"}>Undo last</button><button class="btn" data-o="clear" ${n?"":"disabled"}>Show all again</button>${BACK?`<button class="btn" data-o="tag">👤 Tag people</button><button class="btn" data-o="inbox">🔔 Inbox<span id="inboxn"></span></button><button class="btn" data-o="stats">📊 Stats</button>`:""}<button class="btn" data-o="exit" title="See the page the way friends see it">Friend view</button>`;
   pollInbox();
   b.onclick=e=>{const k=e.target.dataset?.o;if(!k)return;
     if(k==="copy"){const cmd="python3 tools/hide_clips.py "+[...HIDE].join(" ");(navigator.clipboard?navigator.clipboard.writeText(cmd):Promise.reject()).then(()=>toast("Copied. Run it in the GoPro Travels Workspace folder."),()=>prompt("Copy this command",cmd))}
     else if(k==="undo"){const l=[...HIDE].pop();HIDE.delete(l);store.set("gtx-hide",[...HIDE]);vocab.v=null;prep();buildDays();render();ownerBar()}
     else if(k==="clear"){HIDE=new Set();store.set("gtx-hide",[]);vocab.v=null;prep();buildDays();render();ownerBar()}
+    else if(k==="tag"){TAG.on=!TAG.on;TAG.sel.clear();tagBar();render()}
     else if(k==="inbox")openInbox();
     else if(k==="stats")openStats();
     else if(k==="exit"){const q=new URLSearchParams(location.search);q.set("owner","0");location.search=q.toString()}}
