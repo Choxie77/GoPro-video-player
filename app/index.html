@@ -1211,6 +1211,8 @@ dialog#pdlg.studio { width: min(1500px, calc(100vw - 16px)); height: calc(100vh 
 .ed-approve { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; border-top: 1px solid var(--line); padding-top: 12px; }
 .ed-approve video { max-height: 70vh; width: auto; max-width: 100%; }
 .pcard { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: start; }
+.pact, .pbulk { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; } .pact .btn, .pbulk .btn, .pparked .btn.small { font-size: 12px; padding: 4px 10px; min-height: 0; }
+.pparked { opacity: .85; }
 .nextstep { font-size: 12px; font-weight: 600; color: var(--ink); }
 </style>
 <script id="data" type="application/json">null</script>
@@ -1220,9 +1222,4 @@ dialog#pdlg.studio { width: min(1500px, calc(100vw - 16px)); height: calc(100vh 
 
 
 <script>window.__GTA_SCRIPTS=["lib-0.js", "https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js", "https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js", "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js", "lib-1.js", "studio.js", "inline.js"];</script>
-<script src="boot.js"></script>
-<script src="review.js"></script>
-<script src="rate.js"></script>
-<script src="trends.js"></script>
-<script src="editstyle.js"></script>
-<script src="miniplayer.js"></script>
+<sc

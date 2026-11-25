@@ -420,7 +420,7 @@ async function addItemsToPost(pid, items) {
   const saved = await savePost(pid, {...rest, items: all, status: (p.status || "idea") === "idea" ? "clips" : p.status, days: daysOf(all.map((it) => it.clip), p.days)});
   if (saved) toast(`Added ${fresh.length === 1 ? "a moment" : fresh.length + " moments"} to “${p.title}”`);
 }
-const postOptions = () => [...store.posts.values()].filter((p) => p.status !== "posted").sort(postOrder)
+const postOptions = () => [...store.posts.values()].filter((p) => p.status !== "posted" && !p.parked).sort(postOrder)
   .map((p) => `<option value="${esc(p.id)}">${esc(p.title)}</option>`).join("");
 function momentsHTML(c, prefix) {
   const saved = momentsOf(c.id), dur = c.dur || 1, dis = canSave() ? "" : "disabled";
@@ -774,8 +774,28 @@ function daysOf(clipIds, fallback) {
 }
 function postOrder(a, b) { return (a.days?.[0] || "9999").localeCompare(b.days?.[0] || "9999") || (a.created || 0) - (b.created || 0); }
 function postDays(p) { return p.days ? (p.days[0] === p.days[1] ? fmtShort(p.days[0]) : `${fmtShort(p.days[0])}–${fmtShort(p.days[1])}`) : "no dates yet"; }
-$("board").addEventListener("click", (e) => { const b = e.target.closest(".pcard"); if (b) openPost(b.dataset.id); });
-$("board").addEventListener("keydown", (e) => { const b = e.target.closest(".pcard"); if (b && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openPost(b.dataset.id); } });
+$("board").addEventListener("click", async (e) => {
+  const t = e.target.closest("[data-act],[data-bulk],[data-parkedtoggle]");
+  if (t) {
+    if (t.hasAttribute("data-parkedtoggle")) { store.showParked = !store.showParked; renderBoard(); return; }
+    if (!canSave()) return toast("Sign in to change posts", true);
+    if (t.dataset.bulk) {  // acts on the early-stage posts shown in Building
+      const ids = [...store.posts.values()].filter((p) => ["idea", "clips"].includes(p.status || "idea") && !p.parked).map((p) => p.id);
+      if (!t.dataset.armed) { t.dataset.armed = "1"; t.textContent = t.dataset.bulk === "remove" ? `Delete ${ids.length}? Click again` : `Move ${ids.length}? Click again`; setTimeout(() => { if (t.isConnected) renderBoard(); }, 4000); return; }
+      for (const id of ids) { if (t.dataset.bulk === "remove") await deletePost(id); else { const {id: _i, ...b} = store.posts.get(id); await savePost(id, {...b, parked: true}, true); } }
+      toast(t.dataset.bulk === "remove" ? "Removed" : "Moved to Not now"); renderBoard(); return;
+    }
+    const id = t.dataset.id, p = store.posts.get(id); if (!p) return;
+    if (t.dataset.act === "remove") {
+      if (!t.dataset.armed) { t.dataset.armed = "1"; t.textContent = "Delete? Click again"; setTimeout(() => { if (t.isConnected) { delete t.dataset.armed; t.textContent = "Remove"; } }, 3500); return; }
+      await deletePost(id); renderBoard(); return;
+    }
+    const {id: _i, ...b} = p; await savePost(id, {...b, parked: t.dataset.act === "park"}, true);
+    toast(t.dataset.act === "park" ? "Moved to Not now" : "Back on the board"); renderBoard(); return;
+  }
+  const b = e.target.closest(".pcard"); if (b) openPost(b.dataset.id);
+});
+$("board").addEventListener("keydown", (e) => { if (e.target.closest("[data-act],[data-bulk],[data-parkedtoggle]")) return; const b = e.target.closest(".pcard"); if (b && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openPost(b.dataset.id); } });
 // Drag a post card to another column to change its stage.
 {
   const bd = $("board"); let dragId = null;
@@ -1294,16 +1314,28 @@ function renderBoard() {
   const posts = [...store.posts.values()].sort(postOrder);
   $("newpost").disabled = !canSave();
   $("board").innerHTML = BOARD.map(([name, sts]) => {
-    const ps = posts.filter((p) => sts.includes(p.status || "idea"));
+    const ps = posts.filter((p) => sts.includes(p.status || "idea") && !p.parked);
     return `<div class="col" data-col="${esc(sts[0])}"><div class="col-head"><h3>${name}</h3><span class="muted mono">${ps.length}</span></div>
-      ${ps.map((p) => { const items = postItems(p), v = editsOf(p.id), e = (v.find((x) => x.v === p.edit) || v.at(-1))?.edl, first = e?.shots?.[0] || (items[0] && {clip: items[0].clip, in: items[0].a ?? 0, out: items[0].b ?? 1, x: 0.5});
-        const c = first && byId.get(first.clip);
-        return `<div class="pcard" role="button" tabindex="0" draggable="true" data-id="${esc(p.id)}"><span class="crop cover" style="--r:${cropR(e || {aspect: p.brief?.aspect})};--x:${first?.x ?? 0.5}"><span class="ci" style="${c ? thumbStyle(c, nearestFrame(c, ((first.in || 0) + (first.out || 0)) / 2)) : ""}"></span></span>
-          <span style="display:grid;gap:3px;min-width:0"><strong>${esc(p.title || "Untitled")}</strong>
-          <span class="muted" style="font-size:12px">${KINDS[p.kind] || "Reel"} · ${esc(postDays(p))} · ${e ? `${edlLen(e).toFixed(0)} s cut · v${v.length}` : `${items.length} moments`}</span>
-          <span class="nextstep">${esc(nextStep(p))}</span></span></div>`; }).join("") || `<p class="muted" style="font-size:13px">${name === "Building" ? "Plan posts from the Roadmap, or add a clip's moments to a new post." : "None yet."}</p>`}
+      ${name === "Building" && ps.length > 1 ? `<div class="pbulk"><button class="btn small" data-bulk="park">Not now for all ${ps.length}</button><button class="btn small" data-bulk="remove">Remove all</button></div>` : ""}
+      ${ps.map((p) => cardHTML(p)).join("") || `<p class="muted" style="font-size:13px">${name === "Building" ? "Nothing in progress. Start a fresh post, or plan posts from the Roadmap." : "None yet."}</p>`}
     </div>`;
-  }).join("");
+  }).join("") + parkedHTML(posts);
+}
+function parkedHTML(posts) {
+  const ps = posts.filter((p) => p.parked); if (!ps.length) return "";
+  const open = store.showParked;
+  return `<div class="col pparked"><div class="col-head"><h3>Not now</h3><span class="muted mono">${ps.length}</span></div>
+    <button class="btn small" data-parkedtoggle>${open ? "Hide" : "Show"}</button>
+    ${open ? ps.map((p) => cardHTML(p, true)).join("") : ""}</div>`;
+}
+function cardHTML(p, parked) {
+  const items = postItems(p), v = editsOf(p.id), e = (v.find((x) => x.v === p.edit) || v.at(-1))?.edl, first = e?.shots?.[0] || (items[0] && {clip: items[0].clip, in: items[0].a ?? 0, out: items[0].b ?? 1, x: 0.5});
+  const c = first && byId.get(first.clip), early = ["idea", "clips"].includes(p.status || "idea");
+  return `<div class="pcard" role="button" tabindex="0" ${parked ? "" : 'draggable="true"'} data-id="${esc(p.id)}"><span class="crop cover" style="--r:${cropR(e || {aspect: p.brief?.aspect})};--x:${first?.x ?? 0.5}"><span class="ci" style="${c ? thumbStyle(c, nearestFrame(c, ((first.in || 0) + (first.out || 0)) / 2)) : ""}"></span></span>
+    <span style="display:grid;gap:3px;min-width:0"><strong>${esc(p.title || "Untitled")}</strong>
+    <span class="muted" style="font-size:12px">${KINDS[p.kind] || "Reel"} · ${esc(postDays(p))} · ${e ? `${edlLen(e).toFixed(0)} s cut · v${v.length}` : `${items.length} moments`}</span>
+    <span class="nextstep">${esc(nextStep(p))}</span>
+    <span class="pact">${parked ? `<button class="btn small" data-act="unpark" data-id="${esc(p.id)}">Bring back</button>` : early ? `<button class="btn small" data-act="park" data-id="${esc(p.id)}">Not now</button>` : ""}<button class="btn small" data-act="remove" data-id="${esc(p.id)}">Remove</button></span></span></div>`;
 }
 
 // Free suggestions written in Colab by an open model (catalog/stories.json), matched to the post's place and dates.
