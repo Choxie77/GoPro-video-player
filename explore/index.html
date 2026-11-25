@@ -124,7 +124,7 @@ body:has(#ownerbar) .toast{bottom:auto;top:16px;z-index:60}
 .card .note{display:block;font-style:normal;color:var(--mute);font-size:12px;margin-top:2px}.card .cm{display:inline-block;margin-top:2px;font-size:12px;color:var(--accent)}
 #od{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;max-width:min(680px,94vw);width:100%;max-height:86vh;padding:16px}#od::backdrop{background:#000a}#od h3{margin:0 0 8px}#od table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px}#od td{padding:3px 6px;border-bottom:1px solid var(--line)}#od td:last-child{text-align:right;color:var(--mute)}#od .cmt{border-bottom:1px solid var(--line);padding:8px 0}#od .cmt small{color:var(--mute)}
 .card.tsel{outline:3px solid var(--accent);outline-offset:-3px}
-#tagbar{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);z-index:51;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:8px 12px;font-size:13px;box-shadow:0 6px 24px #0008;max-width:calc(100vw - 24px)}#tagbar .btn{padding:4px 10px;font-size:12.5px}#tagbar input{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:4px 8px}
+#tagbar{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);z-index:51;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:8px 12px;font-size:13px;box-shadow:0 6px 24px #0008;max-width:calc(100vw - 24px)}#tagbar .btn{padding:4px 10px;font-size:12.5px}#od label{display:inline-block;margin:0 10px 6px 0;font-size:13px}#od input,#od select,#od textarea{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:5px 8px;font:inherit;font-size:14px}#od textarea{width:100%;box-sizing:border-box;margin:8px 0}#od .sm{color:var(--mute);font-size:12.5px;margin:4px 0 10px}#tagbar input{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:4px 8px}
 .ff{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 8px;margin-left:8px;white-space:nowrap}
 #od ol{margin:4px 0 8px;padding-left:20px}#od p{margin:6px 0}#od h4{margin:12px 0 2px}
 /* ---- phone-first: most family open this from a WhatsApp link on a phone ---- */
@@ -181,8 +181,8 @@ dialog{max-height:88dvh;overflow:auto}
 </head>
 <body>
 <header><b>Explore the Journey</b><span class="ff">Friends &amp; Family</span><span class="sp"></span>
-  <button class="btn" id="statb" hidden>Trip stats</button><button class="btn" id="pickb" hidden>My picks <span id="pickn"></span></button>
-  <span id="who" style="color:var(--mute);font-size:13px"></span><button class="btn" id="signin" hidden>Sign in with Google</button></header>
+  <button class="btn" id="addb" hidden>＋ Add yours</button><button class="btn" id="statb" hidden>Trip stats</button><button class="btn" id="pickb" hidden>My picks <span id="pickn"></span></button>
+  <button class="btn" id="digb" hidden></button><span id="who" style="color:var(--mute);font-size:13px"></span><button class="btn" id="signin" hidden>Sign in with Google</button></header>
 
 <section id="welcome" hidden>
   <p class="eyebrow">The Journey</p>
@@ -345,12 +345,22 @@ async function fetchIndex(f){
 }
 function useIndex(data,sheets){INDEX=data;SPR=new Map(sheets);prep();FIX.clear();vocab.v=null;setBackend(data.backend)}
 /* Journey backend (comments, Adam's notes, stats): a Google Apps Script in Adam's account, address comes with the index. Without it all of this stays hidden. */
-let BACK="",FEED={comments:{},notes:{}};
-function setBackend(u){BACK=u||"";store.set("gtj-backend",BACK);if(BACK)loadFeed()}
+let BACK="",FEED={comments:{},notes:{}},FEEDP=null;
+/* Audiences: each clip is for everyone (default), friends (friends + family) or family only; each viewer is friends until an owner makes them family.
+   This hides things in the page, it is not a lock: the clips are still shared Drive files. */
+const LVL={everyone:0,friends:1,family:2};
+let CAUD=store.get("gtj-caud",{}),ME=store.get("gtj-me",{aud:"friends",digest:false});   // CAUD {clipId:"friends"|"family"}; ME this viewer
+const myLvl=()=>OWNER?9:LVL[qs.get("owner")==="0"?(qs.get("as")||"friends"):ME.aud]??1;   // ?owner=0&as=family previews a family member
+const canSee=c=>(LVL[CAUD[c.id]||"everyone"]??0)<=myLvl();
+function setBackend(u){BACK=u||"";store.set("gtj-backend",BACK);FEEDP=BACK?loadFeed():null}
+function digBtn(){const b=$("digb");if(!b)return;b.hidden=!(BACK&&token);b.textContent=ME.digest?"🔔 Emails on":"🔔 Email me new clips";b.title=ME.digest?"You get an email when new clips are added. Press to stop.":"Get an email when new clips are added"}
+$("digb").onclick=()=>{ME.digest=!ME.digest;store.set("gtj-me",ME);postBack({action:"digest_pref",on:ME.digest});digBtn();toast(ME.digest?"Done. You'll get an email when there are new clips.":"Emails turned off.")}
 const tk=()=>encodeURIComponent(token||"");
 async function loadFeed(){try{
   if(!OWNER&&qs.get("owner")!=="0"){const w=await (await fetch(`${BACK}?action=whoami&token=${tk()}`)).json();if(w.owner){OWNER=true;prep();buildDays();ownerBar()}}
-  const r=await (await fetch(`${BACK}?action=feed&token=${tk()}`)).json();if(r.error)return;FEED=r;FEED.comments=FEED.comments||{};FEED.notes=FEED.notes||{};applyNotes()}catch(e){}}
+  const r=await (await fetch(`${BACK}?action=feed&token=${tk()}`)).json();if(r.error)return;FEED=r;FEED.comments=FEED.comments||{};FEED.notes=FEED.notes||{};
+  const sig=JSON.stringify([CAUD,ME.aud]);CAUD=r.aud||{};if(r.me)ME={aud:r.me.aud||"friends",digest:!!r.me.digest};store.set("gtj-caud",CAUD);store.set("gtj-me",ME);digBtn();
+  if(JSON.stringify([CAUD,ME.aud])!==sig){vocab.v=null;prep();buildDays()}applyNotes()}catch(e){}}
 const MARK=/\[with ([^\]]+)\]/g;
 function applyNotes(){let ch=false;for(const c of INDEX.clips){const n=FEED.notes[c.id];if(c._t0===undefined){c._t0=c.title;c._d0=c.desc;c._g0=c.tags||[];c._p0=c.pp||[]}
     const raw=n?String(n.desc||""):"",who=[...raw.matchAll(MARK)].map(m=>m[1].trim()).filter(Boolean),vis=raw.replace(MARK,"").trim();
@@ -358,7 +368,7 @@ function applyNotes(){let ch=false;for(const c of INDEX.clips){const n=FEED.note
     if(title!==c.title||desc!==c.desc||pp.join()!==(c.pp||[]).join()){c.title=title;c.desc=desc;c.pp=pp;c.tags=tags;ch=true}}
   if(ch){vocab.v=null;prep();buildDays()}try{render()}catch(e){}}
 const postBack=d=>fetch(BACK,{method:"POST",mode:"no-cors",body:JSON.stringify({...d,token})}).catch(()=>{});
-const noteLine=c=>{const n=FEED.notes[c.id],k=(FEED.comments[c.id]||[]).length;return (n&&String(n.desc||"").replace(MARK,"").trim()?`<em class="note">${esc(String(n.desc).replace(MARK,"").trim().slice(0,90))}</em>`:"")+(k?`<span class="cm">💬 ${k}</span>`:"")};
+const noteLine=c=>{const n=FEED.notes[c.id],k=(FEED.comments[c.id]||[]).length;return (OWNER&&CAUD[c.id]?`<span class="cm">${CAUD[c.id]==="family"?"👪 Family only":"👥 Friends + family"}</span>`:"")+(n&&String(n.desc||"").replace(MARK,"").trim()?`<em class="note">${esc(String(n.desc).replace(MARK,"").trim().slice(0,90))}</em>`:"")+(k?`<span class="cm">💬 ${k}</span>`:"")};
 async function loadIndex(){
   const last=store.get("gtx-last",null),hit=last&&await cget(last.key);
   if(hit){   // show the saved copy now; swap in a newer one if Drive has it
@@ -398,7 +408,7 @@ function prep(){
   INDEX.clips.forEach(c=>{fixPlace(c);makeHK(c)});(INDEX.stops||[]).forEach(s=>{if(s.city==="Wushan")s.city="Guangzhou";makeHK(s)});
   const per=new Map();for(const c of INDEX.clips){if(c.region&&c.city){if(!per.has(c.region))per.set(c.region,new Set());per.get(c.region).add(norm(c.city))}}
   METRO=new Set(["Bangkok","Ho Chi Minh City","Da Nang","Ha Noi","Tokyo","Chongqing Shi"].filter(r=>per.has(r)));
-  CL=INDEX.clips.filter(c=>!c.pre&&!HIDE.has(c.id)).map(c=>{
+  CL=INDEX.clips.filter(c=>!c.pre&&!HIDE.has(c.id)&&canSee(c)).map(c=>{
     c.country=c.country||"Unplaced";
     const h=Number(c.t.slice(11,13)),date=c.t.slice(0,10),mo=Number(date.slice(5,7))-1;
     const label=placeLabel(c.city,c.region);
@@ -721,7 +731,7 @@ $("grid").addEventListener("click",e=>{
   if(TAG.on){const id=b.dataset.id;TAG.sel.has(id)?TAG.sel.delete(id):TAG.sel.add(id);b.classList.toggle("tsel",TAG.sel.has(id));tagBar();return}
   const i=+b.dataset.i;openList(RES,i,RES[i]._sn?.a)});
 $("grid").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.classList.contains("card"))e.target.click()});
-async function ownerGet(a,extra=""){const r=await (await fetch(`${BACK}?action=${a}&token=${tk()}${extra}`)).json();if(r.error){toast("Only your owner accounts can open this.");return null}return r}
+async function ownerGet(a,extra=""){const r=await (await fetch(`${BACK}?action=${a}&token=${tk()}${extra}`)).json();if(r.error){toast(r.error==="unknown action"?"Update the Apps Script first (new version of journey_backend.gs).":"Only your owner accounts can open this.");return null}return r}
 function dlg(html){let d=document.getElementById("od");if(!d){d=document.createElement("dialog");d.id="od";document.body.append(d)}d.innerHTML=html+`<p style="text-align:right;margin:8px 0 0"><button class="btn" id="odx">Close</button></p>`;d.querySelector("#odx").onclick=()=>d.close();d.showModal();return d}
 let inboxT=null;
 async function pollInbox(){clearInterval(inboxT);if(!OWNER||!BACK)return;
@@ -749,6 +759,9 @@ function tagBar(){let b=document.getElementById("tagbar");if(!TAG.on){b&&b.remov
       if(k==="all"){RES.forEach(c=>TAG.sel.add(c.id))}
       else if(k==="clear")TAG.sel.clear();
       else if(k==="done"){TAG.on=false;TAG.sel.clear()}
+      else if(k.startsWith("aud-")){const ids=[...TAG.sel],lv=k.slice(4);if(!ids.length)return toast("Tap some clips first.");
+        for(const id of ids){if(lv==="everyone")delete CAUD[id];else CAUD[id]=lv}store.set("gtj-caud",CAUD);postBack({action:"audience",clips:ids,level:lv});
+        TAG.sel.clear();prep();buildDays();render();toast(`${ids.length} clip${ids.length===1?"":"s"} now ${lv==="family"?"family only":lv==="friends"?"for friends and family":"for everyone"}.`)}
       else{const name=(document.getElementById("tagname").value||"").trim();if(!name)return toast("Type who is in these clips.");const ids=[...TAG.sel];if(!ids.length)return toast("Tap some clips first.");
         const one=async id=>{const nn=FEED.notes[id]||{},raw=String(nn.desc||""),has=[...raw.matchAll(MARK)].some(m=>m[1].trim().toLowerCase()===name.toLowerCase());
           let desc=raw;if(k==="add"&&!has)desc=(raw+" [with "+name+"]").trim();else if(k==="remove")desc=raw.replace(MARK,m=>m.slice(6,-1).trim().toLowerCase()===name.toLowerCase()?"":m).replace(/\s+/g," ").trim();else return;
@@ -756,7 +769,7 @@ function tagBar(){let b=document.getElementById("tagbar");if(!TAG.on){b&&b.remov
         for(let i=0;i<ids.length;i+=6){await Promise.all(ids.slice(i,i+6).map(one));toast(`${Math.min(i+6,ids.length)} of ${ids.length}…`);await new Promise(r=>setTimeout(r,250))}
         TAG.sel.clear();applyNotes();toast(`${k==="add"?"Tagged":"Untagged"} ${ids.length} clips as ${name}. Everyone sees it on their next visit.`);setTimeout(loadFeed,4000)}
       tagBar();document.querySelectorAll("#grid .card").forEach(c=>c.classList.toggle("tsel",TAG.sel.has(c.dataset.id)))}}
-  b.innerHTML=`<b>👤 Tag people</b><span>Tap clips to select them.</span><input id="tagname" value="${esc(document.getElementById("tagname")?.value||"Gaja")}" aria-label="Who is in them" size="10"><span>${TAG.sel.size} selected</span><button class="btn" data-t="all">Select all ${RES.length} shown</button><button class="btn" data-t="clear">Clear</button><button class="btn pri" data-t="add">Tag them</button><button class="btn" data-t="remove">Remove tag</button><button class="btn" data-t="done">Done</button>`}
+  b.innerHTML=`<b>👤 Tag people and audience</b><span>Tap clips to select them.</span><input id="tagname" value="${esc(document.getElementById("tagname")?.value||"Gaja")}" aria-label="Who is in them" size="10"><span>${TAG.sel.size} selected</span><button class="btn" data-t="all">Select all ${RES.length} shown</button><button class="btn" data-t="clear">Clear</button><button class="btn pri" data-t="add">Tag them</button><button class="btn" data-t="remove">Remove tag</button><span>Who can see them:</span><button class="btn" data-t="aud-family">👪 Family only</button><button class="btn" data-t="aud-friends">👥 Friends + family</button><button class="btn" data-t="aud-everyone">🌍 Everyone</button><button class="btn" data-t="done">Done</button>`}
 function ownerHelp(){dlg(`<h3>Owner guide</h3>
 <h4>👤 Tag people</h4><ol><li>Press <b>👤 Tag people</b> in the bar at the bottom.</li><li>Tap clips to select them (selected clips get an orange outline).</li><li>Make sure the name box says the right name, for example Gaja, then press <b>Tag them</b>.</li><li>Press <b>Done</b> when finished.</li></ol>
 <p><b>Faster:</b> narrow first (a place or date range, for example the days she was there), press <b>Select all N shown</b>, then tap the few clips she isn't in to unselect them. <b>Remove tag</b> undoes a tag on the selected clips.</p>
@@ -765,10 +778,57 @@ function ownerHelp(){dlg(`<h3>Owner guide</h3>
 <h4>✂ Hide part of a clip</h4><p>Open a clip, then use <b>Hide a part from friends and family</b> under the video: start to now, now to end, or from and to. Friends' players skip those parts and their Download is hidden. It is a skip, not a deletion, and <b>Preview as a friend</b> shows exactly what they get.</p>
 <h4>🚫 Hide a whole clip</h4><p>The red <b>🚫</b> hides a clip in this browser. Press <b>Copy hide command</b> and run it in Terminal in the GoPro Travels Workspace folder to remove those clips for friends.</p>
 <h4>🔔 Inbox and 📊 Stats</h4><p><b>Inbox</b> lists new comments (you also get an email). <b>Stats</b> shows the most watched clips and places and who watches.</p>
-<h4>Friend view</h4><p>Shows the page the way friends see it. Only your two owner Google accounts see these tools.</p>`)}
+<h4>👪 Audiences</h4><p>Everything is for <b>Everyone</b> unless you change it. In <b>👤 Tag people / audience</b> tap clips, then press <b>👪 Family only</b> (only family see them), <b>👥 Friends + family</b> or <b>🌍 Everyone</b>. Everybody who signs in is a <b>friend</b> until you make them <b>family</b> in <b>👪 People &amp; emails</b>. This hides things in the page, it is not a lock: the clips are still shared Drive files, so keep truly private ones out with Hide.</p>
+<h4>💬 Send to Mum</h4><p>Writes a WhatsApp message with a teaser about what is new since the last time you sent one, and the link. Edit it, then press <b>Open WhatsApp</b>. Add her number once and it opens her chat directly (kept on this device only).</p>
+<h4>✉ Emails about new clips</h4><p>Friends press <b>🔔 Email me new clips</b> at the top. <b>👪 People &amp; emails</b> lists everyone who has signed in, lets you add someone by email (Mum), and turn emails on for them. Each day about 18:00 the script emails them clips that have been in the library at least 12 hours, only the clips their audience may see, so tag new clips first. <b>Send the email now</b> skips the wait.</p>
+<h4>Friend view</h4><p>Shows the page the way friends see it (add <code>&amp;as=family</code> to the address to see what family sees). Only your two owner Google accounts see these tools.</p>`)}
+/* Send to Mum: a ready-to-paste WhatsApp text with a teaser about what is new since the last one sent, and the link. */
+function mumText(o){
+  const lv=LVL[o.aud]??1,vis=CL.filter(c=>(LVL[CAUD[c.id]||"everyone"]??0)<=lv),newest=vis.reduce((m,c)=>c.t>m?c.t:m,"");let since=store.get("gtx-mum-last","");
+  if(!since&&newest){const d=new Date(newest);d.setDate(d.getDate()-7);since=d.toISOString().slice(0,19)}
+  let fresh=vis.filter(c=>c.t>since);const isNew=fresh.length>0,score=c=>(c.hl||0)+c.pick*2+(c.title?.5:0);
+  if(!isNew)fresh=vis.slice().sort((a,b)=>score(b)-score(a)).slice(0,6);
+  const by=new Map();fresh.forEach(c=>by.set(c.o.label,(by.get(c.o.label)||0)+1));const pl=[...by].sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+  const where=pl.length<=1?pl[0]||"the trip":pl.length===2?`${pl[0]} and ${pl[1]}`:`${pl[0]}, ${pl[1]} and ${pl.length-2} other place${pl.length===3?"":"s"}`;
+  const star=fresh.slice().sort((a,b)=>score(b)-score(a))[0],t=star&&star.title?String(star.title).slice(0,60):"";
+  const link=o.to==="clip"&&star?`${SHORT}#clip=${star.id}`:SHORT;
+  const n=fresh.length,text=isNew?`Hi ${o.name||"Mum"}! ${n} new clip${n===1?"":"s"} from ${where} ${n===1?"is":"are"} up${t?`, including "${t}"`:""}. Have a look: ${link}`
+    :`Hi ${o.name||"Mum"}! Here are some of my favourite moments from the trip so far${t?`, like "${t}"`:""}. Have a look: ${link}`;
+  return{text,newest,n:isNew?n:0};
+}
+const SHORT="https://choxie77.github.io/journey/";
+function openMum(){
+  const st={name:store.get("gtx-mum-name","Mum"),aud:store.get("gtx-mum-aud","family"),to:"clip",ph:store.get("gtx-mum-phone","")};
+  const d=dlg(`<h3>💬 Send to Mum</h3><p class="sm">A ready-to-send WhatsApp message with the link and a one-line teaser from what is new.</p>
+    <label>Sending to <input id="mn" value="${esc(st.name)}" size="9"></label><label>She counts as <select id="ma"><option value="family">Family</option><option value="friends">Friends</option></select></label><label>Link opens <select id="mt"><option value="clip">the best new clip</option><option value="home">the Journey page</option></select></label>
+    <label>Her WhatsApp number (optional) <input id="mp" value="${esc(st.ph)}" placeholder="+386 40 123 456" size="16" inputmode="tel"></label>
+    <textarea id="mx" rows="5"></textarea><p class="sm" id="mi"></p>
+    <p><button class="btn pri" id="mw">Open WhatsApp</button> <button class="btn" id="mc">Copy text</button> <button class="btn" id="ms" hidden>Share…</button></p>`);
+  const $d=q=>d.querySelector(q);$d("#ma").value=st.aud;let last={};
+  const gen=()=>{last=mumText({name:$d("#mn").value.trim(),aud:$d("#ma").value,to:$d("#mt").value});$d("#mx").value=last.text;
+    $d("#mi").textContent=last.n?`${last.n} new clip${last.n===1?"":"s"} since the last message. Pressing a button below counts them as sent.`:"Nothing new since the last message, so this picks favourites."};
+  const sent=()=>{store.set("gtx-mum-last",last.newest||store.get("gtx-mum-last",""));store.set("gtx-mum-name",$d("#mn").value.trim()||"Mum");store.set("gtx-mum-aud",$d("#ma").value);store.set("gtx-mum-phone",$d("#mp").value.trim())};
+  ["#mn","#ma","#mt"].forEach(q=>$d(q).oninput=gen);gen();
+  $d("#mw").onclick=()=>{const num=$d("#mp").value.replace(/[^\d]/g,"");sent();window.open(`https://wa.me/${num}?text=${encodeURIComponent($d("#mx").value)}`,"_blank","noopener")};
+  $d("#mc").onclick=()=>{const t=$d("#mx").value;sent();(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("Copied. Paste it into WhatsApp."),()=>{$d("#mx").select();toast("Press copy on the selected text.")})};
+  if(navigator.share){$d("#ms").hidden=false;$d("#ms").onclick=()=>{sent();navigator.share({text:$d("#mx").value}).catch(()=>{})}}
+}
+/* People & emails (owner): who has signed in, family or friend, who gets the new-clips email. */
+async function openPeople(){const r=await ownerGet("viewers");if(!r)return;
+  const row=v=>`<tr data-e="${esc(v.email)}" data-n="${esc(v.name||"")}"><td>${esc(v.name||"")}<br><small style="color:var(--mute)">${esc(v.email)}</small></td><td>${v.owner?"Owner":`<select data-f="aud"><option value="friends"${v.audience==="family"?"":" selected"}>Friend</option><option value="family"${v.audience==="family"?" selected":""}>Family</option></select>`}</td><td style="text-align:center"><input type="checkbox" data-f="dig"${v.digest?" checked":""} aria-label="Emails on"></td></tr>`;
+  const d=dlg(`<h3>👪 People &amp; emails</h3><p class="sm">Everyone who has signed in appears here as a friend. Family see clips marked family only. A tick means they get an email when new clips appear.</p>
+    <table><tr><td><b>Person</b></td><td><b>Is a</b></td><td style="text-align:center"><b>Emails</b></td></tr>${r.viewers.map(row).join("")||"<tr><td colspan=3>Nobody yet.</td></tr>"}</table>
+    <p><b>Add someone</b> (for example Mum, before she signs in)<br><input id="pe" type="email" placeholder="her@gmail.com" size="22"> <input id="pn" placeholder="Name" size="9"> <select id="pa"><option value="family">Family</option><option value="friends">Friend</option></select> <button class="btn" id="pb">Add, emails on</button></p>
+    <p><button class="btn pri" id="pd">✉ Send the email now</button> <span class="sm">Sends new clips to everyone with emails on, without the 12 hour wait.</span></p>`);
+  const send=tr=>postBack({action:"viewer",email:tr.dataset.e,name:tr.dataset.n,audience:tr.querySelector('[data-f="aud"]')?.value||"family",digest:tr.querySelector('[data-f="dig"]').checked});
+  d.addEventListener("change",e=>{const tr=e.target.closest("tr[data-e]");if(tr){send(tr);toast("Saved.")}});
+  d.querySelector("#pb").onclick=()=>{const e=d.querySelector("#pe").value.trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(e))return toast("Type a full email address.");
+    postBack({action:"viewer",email:e,name:d.querySelector("#pn").value.trim(),audience:d.querySelector("#pa").value,digest:true});toast("Added. Reopen this list in a moment.");d.querySelector("#pe").value=""};
+  d.querySelector("#pd").onclick=async()=>{toast("Sending…");const x=await ownerGet("digest_now");if(!x)return;
+    toast(x.baseline?`First run: noted ${x.recorded} existing clips, no emails sent. New clips are announced from now on.`:x.sent?`Sent ${x.sent} email${x.sent===1?"":"s"} about ${x.clips} new clip${x.clips===1?"":"s"}.`:x.waiting?"Nothing to send yet.":"Nothing new to send.")}}
 function ownerBar(){
   if(!OWNER)return;let b=document.getElementById("ownerbar");if(!b){b=document.createElement("div");b.id="ownerbar";document.body.append(b)}
-  const n=HIDE.size;b.innerHTML=`<b>Owner mode</b><span>${n} clip${n===1?"":"s"} hidden</span><button class="btn" data-o="copy" ${n?"":"disabled"}>Copy hide command</button><button class="btn" data-o="undo" ${n?"":"disabled"}>Undo last</button><button class="btn" data-o="clear" ${n?"":"disabled"}>Show all again</button>${BACK?`<button class="btn" data-o="tag">👤 Tag people</button><button class="btn" data-o="inbox">🔔 Inbox<span id="inboxn"></span></button><button class="btn" data-o="stats">📊 Stats</button>`:""}<button class="btn" data-o="help">? Help</button><button class="btn" data-o="exit" title="See the page the way friends see it">Friend view</button>`;
+  const n=HIDE.size;b.innerHTML=`<b>Owner mode</b><span>${n} clip${n===1?"":"s"} hidden</span><button class="btn" data-o="copy" ${n?"":"disabled"}>Copy hide command</button><button class="btn" data-o="undo" ${n?"":"disabled"}>Undo last</button><button class="btn" data-o="clear" ${n?"":"disabled"}>Show all again</button>${BACK?`<button class="btn" data-o="tag">👤 Tag people / audience</button><button class="btn" data-o="people">👪 People &amp; emails</button><button class="btn" data-o="inbox">🔔 Inbox<span id="inboxn"></span></button><button class="btn" data-o="stats">📊 Stats</button>`:""}<button class="btn" data-o="mum">💬 Send to Mum</button><button class="btn" data-o="help">? Help</button><button class="btn" data-o="exit" title="See the page the way friends see it">Friend view</button>`;
   pollInbox();
   b.onclick=e=>{const k=e.target.dataset?.o;if(!k)return;
     if(k==="copy"){const cmd="python3 tools/hide_clips.py "+[...HIDE].join(" ");(navigator.clipboard?navigator.clipboard.writeText(cmd):Promise.reject()).then(()=>toast("Copied. Run it in the GoPro Travels Workspace folder."),()=>prompt("Copy this command",cmd))}
@@ -778,6 +838,8 @@ function ownerBar(){
     else if(k==="tag"){TAG.on=!TAG.on;TAG.sel.clear();tagBar();render()}
     else if(k==="inbox")openInbox();
     else if(k==="stats")openStats();
+    else if(k==="mum")openMum();
+    else if(k==="people")openPeople();
     else if(k==="exit"){const q=new URLSearchParams(location.search);q.set("owner","0");location.search=q.toString()}}
 }
 $("rnd").onclick=()=>{   // a shuffled queue of whatever is showing, starting on a random clip
@@ -1045,12 +1107,47 @@ const pend=e=>{PTR.delete(e.pointerId);if(PTR.size<2)G.pinch=null;if(!PTR.size)s
 gc.addEventListener("pointerup",pend);gc.addEventListener("pointercancel",e=>{G.drag=null;gc.style.cursor="grab";pend(e)});   // cancel = the browser took the gesture to scroll the page
 gc.addEventListener("wheel",e=>{if(G.mode==="globe"){e.preventDefault();G.fly=null;setZoom(G.z*Math.exp(-e.deltaY*.0015));return}if(G.mode!=="map")return;e.preventDefault();MAPDIRTY=true;M.z=Math.max(2.2,Math.min(11,M.z-e.deltaY*.002))},{passive:false});
 
+/* Friends add their own photos or clips: they go to a private "Journey uploads" folder in Adam's Drive (via the backend), nothing is published. */
+const UPMAX=24*1024*1024;
+const b64=blob=>new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(",")[1]||"");r.onerror=no;r.readAsDataURL(blob)});
+async function prepUpload(f){
+  if(f.type.startsWith("image/")&&f.type!=="image/gif"){
+    try{const bm=await createImageBitmap(f),k=Math.min(1,2400/Math.max(bm.width,bm.height)),c=document.createElement("canvas");c.width=Math.round(bm.width*k);c.height=Math.round(bm.height*k);c.getContext("2d").drawImage(bm,0,0,c.width,c.height);
+      const bl=await new Promise(r=>c.toBlob(r,"image/jpeg",.86));if(bl&&bl.size<f.size)return{blob:bl,type:"image/jpeg",name:f.name.replace(/\.\w+$/,"")+".jpg"}}catch(e){}
+  }
+  return{blob:f,type:f.type,name:f.name};
+}
+function openAdd(){
+  const d=dlg(`<h3>Add your photos or clips</h3><p style="margin:0 0 8px;color:var(--mute);font-size:13px">They go privately to Adam, who will add the good ones to the trip. Photos are shrunk automatically. Clips up to 24 MB (about 30 seconds from a phone); for longer ones, send me a Drive link instead.</p>
+  <input type="file" id="upf" accept="image/*,video/*" multiple style="width:100%;margin-bottom:8px">
+  <input type="text" id="upp" placeholder="Where or what was it? (optional)" maxlength="80" style="width:100%;margin-bottom:8px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px">
+  <textarea id="upn" placeholder="Anything Adam should know (optional)" maxlength="500"></textarea>
+  <p id="ups" style="min-height:1.4em;margin:8px 0 0;font-size:13px"></p><div class="acts"><button class="btn pri" id="upg">Send</button></div>`);
+  d.querySelector("#upg").onclick=async()=>{
+    const fs=[...d.querySelector("#upf").files],st=d.querySelector("#ups"),go=d.querySelector("#upg");
+    if(!fs.length){st.textContent="Choose at least one photo or video first.";return}
+    go.disabled=true;let ok=0;const bad=[];
+    for(let i=0;i<fs.length;i++){
+      st.textContent=`Sending ${i+1} of ${fs.length}…`;
+      try{
+        const p=await prepUpload(fs[i]);if(p.blob.size>UPMAX){bad.push(fs[i].name+" (too big)");continue}
+        const r=await fetch(BACK,{method:"POST",body:JSON.stringify({action:"upload",token,type:p.type,filename:p.name,data:await b64(p.blob),place:d.querySelector("#upp").value,note:d.querySelector("#upn").value})});
+        let j=null;try{j=await r.json()}catch(e){}   // if the browser can't read the reply the file was most likely still received
+        if(!j||j.ok)ok++;else bad.push(fs[i].name+" ("+(j.error||"failed")+")")
+      }catch(e){bad.push(fs[i].name+" (no connection)")}
+    }
+    st.textContent=(ok?`Sent ${ok}. Thank you!`:"")+(bad.length?` Not sent: ${bad.join(", ")}`:"");go.disabled=false;if(ok&&!bad.length)d.querySelector("#upf").value=""
+  };
+}
+$("addb").onclick=openAdd;
+
 /* ---------- boot ---------- */
 async function start(){
   $("welcome").hidden=true;$("signin").hidden=true;$("who").textContent=TEST_API?"Test mode":"Signed in";
   try{await loadIndex()}catch(e){if(String(e.message)==="401")return;$("app").hidden=false;$("notes").innerHTML=`<div class="note">${esc(e.message==="403"||e.message==="404"?"This Google account doesn't have access to the trip yet. Send me the Gmail address you signed in with and I'll add you, then reload this page.":"Something went wrong loading the trip ("+e.message+"). Reload the page to try again.")}</div>`;return}
+  if(FEEDP&&store.get("gtj-caud",null)===null)await Promise.race([FEEDP,new Promise(r=>setTimeout(r,4000))]);   // first visit: know the audiences before showing clips
   const topo=loadTopo().then(()=>{visited=new Set(CH.map(c=>COUNTRY_NAME[c.country]||c.country));GDIRTY=MAPDIRTY=true}).catch(()=>{});   // the globe fills in when the map arrives; the clips don't wait for it
-  $("app").hidden=false;$("statb").hidden=false;$("pickb").hidden=false;pickCount();
+  $("app").hidden=false;$("addb").hidden=!BACK;$("statb").hidden=false;$("pickb").hidden=false;pickCount();
   {const o=INDEX.owner||{},w=INDEX.welcome||`Welcome! Here's ${o.trip?"my "+o.trip.charAt(0).toLowerCase()+o.trip.slice(1):"my trip"}. Tap "Start here" for the best bits, or search for a place or a day. Play the journey on the globe to see the route.`;$("hello").hidden=false;$("hello").textContent=w}
   buildDays();hints();const h=readHash();sizeGlobe();
   if(S.place){const c=CH.find(x=>x.label===S.place);if(c)flyTo(c.lon,c.lat)}else{G.lon=100;G.lat=14;G.spin=true}
