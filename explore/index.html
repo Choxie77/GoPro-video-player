@@ -138,7 +138,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-
 
   <section class="tour card2" id="tour" hidden></section>
 
-  <div class="bar"><div class="l"><div id="count" style="font-weight:600"></div><button class="btn pri" id="watch" type="button" hidden></button></div>
+  <div class="bar"><div class="l"><div id="count" style="font-weight:600"></div><button class="btn pri" id="watch" type="button" hidden></button><button class="btn" id="rnd" type="button" hidden title="Play a random clip from what is showing">🎲 Random video</button></div>
     <div class="r"><span class="seg" role="group" aria-label="Layout"><button type="button" id="vg" aria-pressed="true">Grid</button><button type="button" id="vd" aria-pressed="false">Day by day</button></span>
       <button class="chip" id="calb" aria-pressed="false" type="button">📅 Dates</button><button class="chip" id="fp" aria-pressed="false" type="button">Adam's picks</button><button class="chip" id="fh" aria-pressed="false" type="button">My hearts</button>
       <label style="font-size:13px;color:var(--mute)">Sort <select id="sort"><option value="best">Best match</option><option value="new">Newest first</option><option value="old">Oldest first</option><option value="long">Longest first</option></select></label></div></div>
@@ -439,7 +439,7 @@ function render(){
   $("notes").innerHTML=out.notes.map(n=>`<div class="note">${esc(n)}</div>`).join("");
   const hrs=RES.reduce((s,c)=>s+c.dur,0)/3600;
   $("count").textContent=RES.length?`${RES.length.toLocaleString()} clip${RES.length===1?"":"s"} · ${hrs.toFixed(hrs<10?1:0)} h`:"No clips match";
-  const w=$("watch");w.hidden=!RES.length;w.textContent=`▶ Watch ${S.place?""+S.place:hasFilter()?"these":"everything"}`.trim()+" (best first)";
+  $("rnd").hidden=!RES.length;const w=$("watch");w.hidden=!RES.length;w.textContent=`▶ Watch ${S.place?""+S.place:hasFilter()?"these":"everything"}`.trim()+" (best first)";
   const g=$("grid");
   const show=RES.slice(0,S.shown);
   if(S.view==="days"){
@@ -591,6 +591,8 @@ $("grid").addEventListener("click",e=>{
   const d=e.target.closest(".dayh");if(d){S.range=[d.dataset.d,d.dataset.d];S.view="grid";render();const c=CH.find(x=>x.a<=d.dataset.d&&x.b>=d.dataset.d);if(c)flyTo(c.lon,c.lat);return}
   const b=e.target.closest(".card");if(!b)return;const i=+b.dataset.i;openList(RES,i,RES[i]._sn?.a)});
 $("grid").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.classList.contains("card"))e.target.click()});
+$("rnd").onclick=()=>{   // a shuffled queue of whatever is showing, starting on a random clip
+  if(!RES.length)return;const a=RES.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}openList(a,0)};
 $("watch").onclick=()=>{   // the best clips of whatever is showing, played in the order they happened
   const best=[...RES].sort((a,b)=>b.pick-a.pick||(b.hl||0)-(a.hl||0)).slice(0,40).sort((a,b)=>a.t<b.t?-1:1);openList(best,0)};
 
