@@ -383,7 +383,10 @@ let INDEX = null, SPRITES = new Map(), spriteUrls = new Map(), indexError = null
 async function loadIndex() {
   if (INDEX || indexError) return INDEX;
   try {
-    const found = await api("", {q: "name='player_index.json' and trashed=false", fields: "files(id,parents,modifiedTime)", orderBy: "modifiedTime desc", pageSize: "5"});
+    // the trip folders are "anyone with the link": people not added by name can't SEARCH for files, but can list the export folder by its id
+    const EXPORT_FOLDER = "1c6v-E1wQJ7nTLIPYx_3K9Qah2PLuYkYs";
+    let found = await api("", {q: `'${EXPORT_FOLDER}' in parents and name='player_index.json' and trashed=false`, fields: "files(id,parents,modifiedTime)", pageSize: "5"}).catch(() => ({}));
+    if (!found.files?.[0]) found = await api("", {q: "name='player_index.json' and trashed=false", fields: "files(id,parents,modifiedTime)", orderBy: "modifiedTime desc", pageSize: "5"});
     const f = found.files?.[0];
     if (!f) throw new Error("index not found");
     INDEX = await api(f.id, {alt: "media"});

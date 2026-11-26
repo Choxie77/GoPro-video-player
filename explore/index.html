@@ -338,15 +338,23 @@ async function pickCut(){
     const w=await (await fetch(`${BACK0}?action=whoami&token=${encodeURIComponent(token)}`,{signal:c.signal})).json();
     if(w&&!w.error){CUT=w.aud==="relatives"?"relatives":"";store.set("gtj-cut",CUT)}}catch(e){}
 }
+/* The trip folders are "anyone with the link can view" (26 Nov 2026). Drive search never lists link-shared files for people who
+   weren't added by name, so the page opens the index by its fixed id (and lists the export folder by id) instead of searching. */
+const EXPORT_FOLDER="1c6v-E1wQJ7nTLIPYx_3K9Qah2PLuYkYs";
+const INDEX_IDS={"explore_family_index.json":"1kqk8jcHan0bNDl4AB3wEt8gq0CG-aPuc","explore_index.json":"1My0G9Bzc7-v1wCGlgoE63UytTadnNBE3"};
 async function findIndex(){
-  for(const name of [...(CUT==="relatives"?["explore_family_index.json"]:[]),"explore_index.json","player_index.json"]){
+  for(const name of [...(CUT==="relatives"?["explore_family_index.json"]:[]),"explore_index.json"]){
+    try{const l=await api("",{q:`'${EXPORT_FOLDER}' in parents and name='${name}' and trashed=false`,fields:"files(id,parents,modifiedTime)",pageSize:"5"});if(l.files?.[0])return l.files[0]}catch(e){if(String(e.message)==="401")throw e}
+    try{return await api(INDEX_IDS[name],{fields:"id,parents,modifiedTime"})}catch(e){if(String(e.message)==="401")throw e}
+  }
+  for(const name of ["explore_index.json","player_index.json"]){   // old setups: shared by name
     const found=await api("",{q:`name='${name}' and trashed=false`,fields:"files(id,parents,modifiedTime)",orderBy:"modifiedTime desc",pageSize:"5"});
     if(found.files?.[0])return found.files[0];
   }
   throw new Error("NOACCESS");
 }
 async function listSheets(parent){
-  if(!parent)return [];
+  parent=parent||EXPORT_FOLDER;
   const l=await api("",{q:`'${parent}' in parents and name contains 'gtl-' and trashed=false`,fields:"files(id,name,modifiedTime)",pageSize:"1000"});
   return (l.files||[]).filter(s=>/^gtl-(sprite|cover)-/.test(s.name)).map(s=>[s.name,s.id+":"+(s.modifiedTime||"")]);
 }
